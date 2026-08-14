@@ -24,7 +24,8 @@ $nodeRoot = Join-Path $runtimeRoot $nodeFolder
 $nodeExe = Join-Path $nodeRoot 'node.exe'
 $npmCli = Join-Path $nodeRoot 'node_modules\npm\bin\npm-cli.js'
 $containerName = 'balto-qwen38'
-$containerImage = 'lmsysorg/sglang:qwen38-27b'
+$containerImage = 'lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1'
+$containerConfig = 'qwen38-nvfp4-dspark-80k-v1'
 $modelName = 'RadixArk/Qwen3.8-27B-NVFP4'
 $draftName = 'RadixArk/Qwen3.8-27B-DSpark'
 
@@ -239,7 +240,7 @@ function Assert-Compatible {
   $disk = Get-PSDrive -Name $driveRoot.Substring(0, 1)
   if ($disk.Free -lt 90GB) { throw "Balto needs at least 90 GB free on $driveRoot for the image, model cache, and updates." }
 
-  if ($state.warning -and $state.warning -like 'Another local model*') { throw $state.warning }
+  if ($state.warning -and ($state.warning -like 'Another local model*' -or $state.warning -like 'Another app is using*')) { throw $state.warning }
 }
 
 function Ensure-Wsl {
@@ -356,9 +357,14 @@ function Start-BaltoProcess([string]$PidName, [string]$FilePath, [string[]]$Argu
 function Ensure-Container {
   $existing = & docker ps -a --filter "name=^/$containerName$" --format '{{.Names}}' 2>$null
   if ($existing) {
-    $running = & docker ps --filter "name=^/$containerName$" --format '{{.Names}}' 2>$null
-    if (-not $running) { & docker start $containerName 2>&1 | ForEach-Object { Write-Log "docker: $_" } }
-    return
+    $installedConfig = & docker inspect -f '{{ index .Config.Labels "com.adore.balto.config" }}' $containerName 2>$null
+    if ($installedConfig -eq $containerConfig) {
+      $running = & docker ps --filter "name=^/$containerName$" --format '{{.Names}}' 2>$null
+      if (-not $running) { & docker start $containerName 2>&1 | ForEach-Object { Write-Log "docker: $_" } }
+      return
+    }
+    Write-Log "Replacing Balto container configuration '$installedConfig' with '$containerConfig'. Model weights remain in the persistent volume."
+    & docker rm --force $containerName 2>&1 | ForEach-Object { Write-Log "docker: $_" }
   }
 
   Update-State @{ phase = 'downloading-runtime'; progress = 34; message = 'Downloading the pinned SGLang runtime. Docker resumes interrupted layers.' }
@@ -368,6 +374,7 @@ function Ensure-Container {
   Update-State @{ phase = 'downloading-model'; progress = 47; message = 'Downloading Qwen 3.8 27B NVFP4 and its DSpark draft. Partial downloads are preserved.' }
   $dockerArgs = @(
     'run', '-d', '--name', $containerName,
+    '--label', "com.adore.balto.config=$containerConfig",
     '--restart', 'unless-stopped',
     '--gpus', 'all',
     '--shm-size', '32g',

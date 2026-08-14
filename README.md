@@ -22,12 +22,13 @@ These are measurements from one machine, not a guarantee for every prompt. Promp
 ## What the installer does
 
 1. Confirms that the PC has one RTX 5090, enough free disk space, and current NVIDIA support.
-2. Installs or starts Docker Desktop.
-3. Downloads the pinned `lmsysorg/sglang:qwen38-27b` image.
+2. Installs Docker Desktop in its official per-user WSL 2 mode, or starts an existing installation.
+3. Downloads the `lmsysorg/sglang:qwen38-27b` image at the exact tested digest.
 4. Creates a persistent Docker volume for model files, so interrupted downloads resume and updates do not erase weights.
 5. Starts `RadixArk/Qwen3.8-27B-NVFP4` with `RadixArk/Qwen3.8-27B-DSpark` using the tested 80K configuration.
 6. Installs the coding workspace into Balto's private app directory.
-7. Runs one model at a time and warns when another model container is already using the GPU.
+7. Runs one model at a time and refuses to compete with another app already using significant GPU memory.
+8. Applies future performance configuration updates without deleting the persistent model cache.
 
 The small app installer does not contain the Docker image or model weights. First launch requires a large download and at least 90 GB of free disk space.
 

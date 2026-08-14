@@ -16,6 +16,9 @@ test('ships the exact one-5090 inference configuration', async () => {
     "'--model-path', $modelName",
     "'--speculative-draft-model-path', $draftName",
   ]) assert.match(script, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.match(script, /lmsysorg\/sglang@sha256:[a-f0-9]{64}/)
+  assert.match(script, /com\.adore\.balto\.config/)
+  assert.match(script, /balto-qwen38-cache/)
 })
 
 test('remote access remains tailnet-only', async () => {
