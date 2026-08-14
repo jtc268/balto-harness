@@ -32,14 +32,15 @@
       <section class="hero">
         <div class="eyebrow"><span></span> Built for one RTX 5090</div>
         <h1>Qwen 3.8 27B<br /><span>2x the speed</span></h1>
-        <p class="hero-copy">Code at 150 tok/s. Chat at up to 300 tok/s.</p>
+        <p class="hero-copy">Code at 150 tok/s · Chat at up to 300 tok/s</p>
         <div class="hero-actions">
           <button class="primary-button" id="primary-action" type="button">
-            <span>Check this PC</span>
+            <span>Start</span>
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6"/></svg>
           </button>
           <button class="text-button" id="view-log" type="button">View setup log</button>
         </div>
+        <p class="setup-note">Unload any other local models before starting Balto</p>
       </section>
 
       <section class="system-panel">
@@ -50,13 +51,73 @@
           </div>
           <div class="progress-ring" id="progress-ring" style="--progress: 4"><strong id="progress-value">4%</strong></div>
         </div>
-        <p class="phase-message" id="phase-message">Balto is checking the GPU, Docker, Tailscale, and local services.</p>
+        <p class="phase-message" id="phase-message">Balto is checking this RTX 5090</p>
+
+        <section class="setup-journey" id="setup-journey" aria-live="polite" aria-label="Balto setup progress">
+          <div class="journey-summary">
+            <div>
+              <span class="journey-kicker">Automatic setup</span>
+              <h3 id="journey-title">Balto is getting ready</h3>
+              <p id="journey-detail">Everything happens here. Balto will open your coding workspace when setup is complete</p>
+            </div>
+            <div class="journey-time">
+              <span id="journey-step">Step 1 of 4</span>
+              <strong id="journey-eta">A few minutes</strong>
+            </div>
+          </div>
+
+          <div class="balto-track" id="balto-track" style="--progress: 4">
+            <div class="track-fill"></div>
+            <div class="balto-runner" aria-hidden="true">
+              <div class="runner-sprite">
+                <span class="dog-tail"></span>
+                <span class="dog-body"></span>
+                <span class="dog-leg dog-leg-back"></span>
+                <span class="dog-leg dog-leg-front"></span>
+                <span class="dog-head"><img src="/balto-mark.svg" alt="" /></span>
+                <span class="runner-dust runner-dust-one"></span>
+                <span class="runner-dust runner-dust-two"></span>
+              </div>
+            </div>
+            <span class="track-start">START</span>
+            <span class="track-finish">CODE</span>
+          </div>
+
+          <div class="progress-meta">
+            <span id="download-detail">Preparing the route</span>
+            <span id="elapsed-time">Elapsed 0s</span>
+          </div>
+
+          <ol class="setup-steps">
+            <li id="setup-step-system">
+              <span class="step-marker">1</span>
+              <div><strong>Check your PC</strong><span>GPU, storage, and Windows support</span></div>
+            </li>
+            <li id="setup-step-runtime">
+              <span class="step-marker">2</span>
+              <div><strong>Build the engine</strong><span>Private runtime, coding tools, and Documents\Balto</span></div>
+            </li>
+            <li id="setup-step-model">
+              <span class="step-marker">3</span>
+              <div><strong>Download Qwen</strong><span>About 24 GB, saved safely as it downloads</span></div>
+            </li>
+            <li id="setup-step-launch">
+              <span class="step-marker">4</span>
+              <div><strong>Start coding</strong><span>Load the GPU and open a fresh workspace</span></div>
+            </li>
+          </ol>
+
+          <div class="journey-note">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg>
+            <span id="journey-note">Keep Balto open. Downloads resume automatically if your connection is interrupted</span>
+          </div>
+        </section>
 
         <div class="check-grid">
           <div class="check-item" id="check-gpu"><i></i><div><strong>RTX 5090</strong><span>Detecting GPU and VRAM</span></div></div>
           <div class="check-item" id="check-docker"><i></i><div><strong>Inference engine</strong><span>High-speed local runtime</span></div></div>
-          <div class="check-item" id="check-model"><i></i><div><strong>Model weights</strong><span>Qwen 3.8 27B plus speed draft</span></div></div>
-          <div class="check-item" id="check-workspace"><i></i><div><strong>Coding workspace</strong><span>Local tools and 80K context</span></div></div>
+          <div class="check-item" id="check-model"><i></i><div><strong>Qwen model</strong><span>Optimized for this RTX 5090</span></div></div>
+          <div class="check-item" id="check-workspace"><i></i><div><strong>Coding workspace</strong><span>Efficient local tool calls</span></div></div>
         </div>
 
         <div class="warning-card" id="warning-card" hidden>
@@ -70,9 +131,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15a4 4 0 0 1 .5-8A6 6 0 0 1 17 8a4 4 0 1 1 1 7H5Zm7-4v9m-3-3 3 3 3-3"/></svg>
         </div>
         <div class="remote-copy">
-          <strong>Private remote steering</strong>
-          <span id="remote-description">Sign in to Tailscale and open Balto from any device on your tailnet.</span>
-          <a id="remote-url" href="#" hidden></a>
+          <strong>Private web app</strong>
+          <span id="remote-description">Available after Balto starts</span>
+          <a id="remote-url" href="#" aria-label="Open your private Balto web app" hidden></a>
         </div>
         <label class="switch" aria-label="Enable private remote access">
           <input id="remote-toggle" type="checkbox" />
@@ -90,10 +151,6 @@
         <div class="setting-row">
           <div><strong>Model configuration</strong><span>Qwen 3.8 27B NVFP4, DSpark, 80K context</span></div>
           <span class="tag">PINNED</span>
-        </div>
-        <div class="setting-row">
-          <div><strong>Single-model guard</strong><span>Balto checks for competing GPU workloads before launch</span></div>
-          <span class="tag green">ON</span>
         </div>
         <button class="setting-row update-row" id="update-row" type="button">
           <div><strong>Updates</strong><span id="update-detail">Checking signed releases</span></div>

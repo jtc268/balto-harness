@@ -58,6 +58,7 @@ function updateSpeedFromEvent(line, requestState) {
     const now = performance.now()
     if (!requestState.firstTokenAt) requestState.firstTokenAt = now
     const elapsedSeconds = Math.max((now - requestState.firstTokenAt) / 1000, 0.001)
+    if (completionTokens < 4 || elapsedSeconds < 0.02) return
     const measuredTokens = Math.max(completionTokens - 1, 1)
     speed.state = 'live'
     speed.completionTokens = completionTokens
@@ -80,8 +81,18 @@ async function proxy(request, response) {
   }
 
   const headers = { ...request.headers }
-  delete headers.host
-  delete headers['content-length']
+  for (const name of [
+    'host',
+    'connection',
+    'proxy-connection',
+    'keep-alive',
+    'transfer-encoding',
+    'upgrade',
+    'te',
+    'trailer',
+    'expect',
+    'content-length',
+  ]) delete headers[name]
   headers.authorization = headers.authorization || 'Bearer local-balto'
   if (body) headers['content-length'] = String(body.length)
 
@@ -89,7 +100,8 @@ async function proxy(request, response) {
   try {
     upstreamResponse = await fetch(target, { method: request.method, headers, body, duplex: body ? 'half' : undefined })
   } catch (error) {
-    json(response, 502, { error: { message: `Balto inference is unavailable: ${error.message}` } })
+    const detail = error.cause?.message || error.message
+    json(response, 502, { error: { message: `Balto inference is unavailable: ${detail}` } })
     return
   }
 

@@ -3,23 +3,25 @@ use std::fs;
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Manager, State};
+use std::thread;
+use std::time::Duration;
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-#[derive(Default)]
-struct AppState {
-    status_refreshed: AtomicBool,
-}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct BaltoStatus {
     phase: String,
+    stage: Option<String>,
     message: String,
     progress: u8,
+    started_at: Option<String>,
+    downloaded_gb: Option<f64>,
+    download_total_gb: Option<f64>,
+    download_rate_mbps: Option<f64>,
+    eta_seconds: Option<u64>,
     gpu_name: Option<String>,
     gpu_memory_mib: Option<u64>,
     gpu_memory_used_mib: Option<u64>,
@@ -32,8 +34,6 @@ struct BaltoStatus {
     remote_url: Option<String>,
     inference_ready: bool,
     workspace_ready: bool,
-    #[serde(default)]
-    competing_models: Vec<String>,
     warning: Option<String>,
     updated_at: Option<String>,
 }
@@ -102,21 +102,10 @@ fn read_status(app: &AppHandle) -> Result<BaltoStatus, String> {
 }
 
 #[tauri::command]
-fn get_status(app: AppHandle, app_state: State<'_, AppState>) -> Result<BaltoStatus, String> {
+fn get_status(app: AppHandle) -> Result<BaltoStatus, String> {
     let app_data = app_data_dir(&app)?;
     fs::create_dir_all(&app_data)
         .map_err(|error| format!("Cannot create {}: {error}", app_data.display()))?;
-
-    if !app_state.status_refreshed.swap(true, Ordering::Relaxed) {
-        let resources = resource_runtime_dir(&app)?;
-        let script = resources.join("balto.ps1");
-        if script.exists() {
-            let _ = powershell_command(&script, "status", &app_data, &resources)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
-        }
-    }
     read_status(&app)
 }
 
@@ -137,14 +126,69 @@ fn spawn_action(app: &AppHandle, action: &str) -> Result<(), String> {
         .map_err(|error| format!("Could not start Balto action '{action}': {error}"))
 }
 
-#[tauri::command]
-fn setup_stack(app: AppHandle) -> Result<(), String> {
-    spawn_action(&app, "setup")
+fn service_watchdog_pass(app: &AppHandle, recovery_armed: &mut bool) {
+    let Ok(current) = read_status(app) else {
+        return;
+    };
+    if matches!(current.phase.as_str(), "ready" | "degraded") {
+        *recovery_armed = true;
+    } else if matches!(
+        current.phase.as_str(),
+        "not-installed"
+            | "installing"
+            | "downloading-runtime"
+            | "downloading-model"
+            | "starting"
+            | "stopping"
+            | "stopped"
+    ) {
+        *recovery_armed = false;
+    }
+
+    let Ok(app_data) = app_data_dir(app) else {
+        return;
+    };
+    let Ok(resources) = resource_runtime_dir(app) else {
+        return;
+    };
+    let script = resources.join("balto.ps1");
+    if !script.exists() {
+        return;
+    }
+
+    let _ = powershell_command(&script, "status", &app_data, &resources)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+
+    let Ok(refreshed) = read_status(app) else {
+        return;
+    };
+    if refreshed.phase == "ready" {
+        *recovery_armed = true;
+        return;
+    }
+    if *recovery_armed && matches!(refreshed.phase.as_str(), "degraded" | "failed") {
+        let _ = powershell_command(&script, "start", &app_data, &resources)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+fn run_service_watchdog(app: AppHandle) {
+    thread::spawn(move || {
+        let mut recovery_armed = false;
+        loop {
+            service_watchdog_pass(&app, &mut recovery_armed);
+            thread::sleep(Duration::from_secs(5));
+        }
+    });
 }
 
 #[tauri::command]
-fn take_over_gpu(app: AppHandle) -> Result<(), String> {
-    spawn_action(&app, "takeover")
+fn setup_stack(app: AppHandle) -> Result<(), String> {
+    spawn_action(&app, "setup")
 }
 
 #[tauri::command]
@@ -201,33 +245,42 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_workspace(app: AppHandle) -> Result<(), String> {
+fn open_workspace(app: AppHandle, fresh: Option<bool>) -> Result<(), String> {
     if !read_status(&app)?.workspace_ready {
         return Err("Balto is still starting.".into());
     }
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "Balto window is unavailable.".to_string())?;
+    let workspace_url = if fresh.unwrap_or(false) {
+        "http://127.0.0.1:3080/?balto=new"
+    } else {
+        "http://127.0.0.1:3080/"
+    };
     window
-        .navigate(
-            "http://127.0.0.1:3080"
-                .parse()
-                .map_err(|_| "Invalid workspace URL")?,
-        )
+        .navigate(workspace_url.parse().map_err(|_| "Invalid workspace URL")?)
         .map_err(|error| format!("Could not open the Balto workspace: {error}"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(AppState::default())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
+        .setup(|app| {
+            run_service_watchdog(app.handle().clone());
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             get_status,
             setup_stack,
-            take_over_gpu,
             start_stack,
             stop_stack,
             enable_remote,
