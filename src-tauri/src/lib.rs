@@ -32,8 +32,6 @@ struct BaltoStatus {
     remote_url: Option<String>,
     inference_ready: bool,
     workspace_ready: bool,
-    #[serde(default)]
-    competing_models: Vec<String>,
     warning: Option<String>,
     updated_at: Option<String>,
 }
@@ -143,11 +141,6 @@ fn setup_stack(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn take_over_gpu(app: AppHandle) -> Result<(), String> {
-    spawn_action(&app, "takeover")
-}
-
-#[tauri::command]
 fn start_stack(app: AppHandle) -> Result<(), String> {
     spawn_action(&app, "start")
 }
@@ -201,19 +194,20 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn open_workspace(app: AppHandle) -> Result<(), String> {
+fn open_workspace(app: AppHandle, fresh: Option<bool>) -> Result<(), String> {
     if !read_status(&app)?.workspace_ready {
         return Err("Balto is still starting.".into());
     }
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "Balto window is unavailable.".to_string())?;
+    let workspace_url = if fresh.unwrap_or(false) {
+        "http://127.0.0.1:3080/?balto=new"
+    } else {
+        "http://127.0.0.1:3080/"
+    };
     window
-        .navigate(
-            "http://127.0.0.1:3080"
-                .parse()
-                .map_err(|_| "Invalid workspace URL")?,
-        )
+        .navigate(workspace_url.parse().map_err(|_| "Invalid workspace URL")?)
         .map_err(|error| format!("Could not open the Balto workspace: {error}"))
 }
 
@@ -227,7 +221,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_status,
             setup_stack,
-            take_over_gpu,
             start_stack,
             stop_stack,
             enable_remote,

@@ -1,10 +1,24 @@
-import { copyFile, readFile, readdir, writeFile } from 'node:fs/promises'
+import { access, copyFile, readFile, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const [dshRoot, resources] = process.argv.slice(2)
 if (!dshRoot || !resources) throw new Error('usage: patch-dsh.mjs <dsh-root> <resources>')
 
-const deepseekRoot = join(dshRoot, 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai')
+const deepseekRoots = [
+  join(dshRoot, 'node_modules', '@deepseek-ai'),
+  join(dshRoot, 'node_modules', '@deepseek-ai', 'dsh', 'node_modules', '@deepseek-ai'),
+]
+let deepseekRoot
+for (const candidate of deepseekRoots) {
+  try {
+    await access(join(candidate, 'dsh-web-frontend', 'dist', 'index.html'))
+    deepseekRoot = candidate
+    break
+  } catch {
+    // npm may hoist the pinned DSH packages or keep them nested.
+  }
+}
+if (!deepseekRoot) throw new Error('The Balto coding workspace frontend was not found')
 const dist = join(deepseekRoot, 'dsh-web-frontend', 'dist')
 const assets = join(dist, 'assets')
 const scriptTag = '    <script defer src="/assets/balto-ui.js"></script>'

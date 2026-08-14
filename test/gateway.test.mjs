@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { once } from 'node:events'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
@@ -23,6 +24,11 @@ async function waitFor(url) {
 }
 
 test('gateway applies safe sampling and reports exact streaming speed', async (context) => {
+  const gatewaySource = await readFile(new URL('../runtime/gateway.mjs', import.meta.url), 'utf8')
+  assert.match(gatewaySource, /'connection'/)
+  assert.match(gatewaySource, /'transfer-encoding'/)
+  assert.match(gatewaySource, /error\.cause\?\.message/)
+  assert.match(gatewaySource, /completionTokens < 4/)
   let received
   const upstream = http.createServer(async (request, response) => {
     if (request.url === '/health') {

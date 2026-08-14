@@ -32,14 +32,15 @@
       <section class="hero">
         <div class="eyebrow"><span></span> Built for one RTX 5090</div>
         <h1>Qwen 3.8 27B<br /><span>2x the speed</span></h1>
-        <p class="hero-copy">Code at 150 tok/s. Chat at up to 300 tok/s.</p>
+        <p class="hero-copy">Code at 150 tok/s · Chat at up to 300 tok/s</p>
         <div class="hero-actions">
           <button class="primary-button" id="primary-action" type="button">
-            <span>Check this PC</span>
+            <span>Start</span>
             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6"/></svg>
           </button>
           <button class="text-button" id="view-log" type="button">View setup log</button>
         </div>
+        <p class="setup-note">Unload any other local models before starting Balto</p>
       </section>
 
       <section class="system-panel">
@@ -50,13 +51,13 @@
           </div>
           <div class="progress-ring" id="progress-ring" style="--progress: 4"><strong id="progress-value">4%</strong></div>
         </div>
-        <p class="phase-message" id="phase-message">Balto is checking the GPU, Docker, Tailscale, and local services.</p>
+        <p class="phase-message" id="phase-message">Balto is checking this RTX 5090</p>
 
         <div class="check-grid">
           <div class="check-item" id="check-gpu"><i></i><div><strong>RTX 5090</strong><span>Detecting GPU and VRAM</span></div></div>
           <div class="check-item" id="check-docker"><i></i><div><strong>Inference engine</strong><span>High-speed local runtime</span></div></div>
-          <div class="check-item" id="check-model"><i></i><div><strong>Model weights</strong><span>Qwen 3.8 27B plus speed draft</span></div></div>
-          <div class="check-item" id="check-workspace"><i></i><div><strong>Coding workspace</strong><span>Local tools and 80K context</span></div></div>
+          <div class="check-item" id="check-model"><i></i><div><strong>Qwen model</strong><span>Optimized for this RTX 5090</span></div></div>
+          <div class="check-item" id="check-workspace"><i></i><div><strong>Coding workspace</strong><span>Efficient local tool calls</span></div></div>
         </div>
 
         <div class="warning-card" id="warning-card" hidden>
@@ -70,9 +71,9 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15a4 4 0 0 1 .5-8A6 6 0 0 1 17 8a4 4 0 1 1 1 7H5Zm7-4v9m-3-3 3 3 3-3"/></svg>
         </div>
         <div class="remote-copy">
-          <strong>Private remote steering</strong>
-          <span id="remote-description">Sign in to Tailscale and open Balto from any device on your tailnet.</span>
-          <a id="remote-url" href="#" hidden></a>
+          <strong>Private web app</strong>
+          <span id="remote-description">Available after Balto starts</span>
+          <a id="remote-url" href="#" aria-label="Open your private Balto web app" hidden></a>
         </div>
         <label class="switch" aria-label="Enable private remote access">
           <input id="remote-toggle" type="checkbox" />
@@ -90,10 +91,6 @@
         <div class="setting-row">
           <div><strong>Model configuration</strong><span>Qwen 3.8 27B NVFP4, DSpark, 80K context</span></div>
           <span class="tag">PINNED</span>
-        </div>
-        <div class="setting-row">
-          <div><strong>Single-model guard</strong><span>Balto checks for competing GPU workloads before launch</span></div>
-          <span class="tag green">ON</span>
         </div>
         <button class="setting-row update-row" id="update-row" type="button">
           <div><strong>Updates</strong><span id="update-detail">Checking signed releases</span></div>

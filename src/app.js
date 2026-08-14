@@ -31,11 +31,14 @@ let currentStatus = null
 let busy = false
 let autoSetupChecked = false
 let workspaceOpened = false
+let freshWorkspaceRequested = false
 let availableUpdate = null
+let remoteChanging = false
+let updateInstalling = false
 
 const previewStatus = {
   phase: 'not-installed',
-  message: 'Ready to inspect this RTX 5090 system.',
+  message: 'Ready to inspect this RTX 5090 system',
   progress: 4,
   gpuName: 'NVIDIA GeForce RTX 5090',
   gpuMemoryMib: 32607,
@@ -61,16 +64,19 @@ function isWorking(phase) {
   return ['installing', 'downloading-runtime', 'downloading-model', 'starting', 'stopping'].includes(phase)
 }
 
+function withoutTrailingPeriod(value) {
+  return String(value || '').replace(/[.]+$/, '')
+}
+
 function render(status) {
   currentStatus = status
   const progress = Number(status.progress || 0)
   const ready = Boolean(status.workspaceReady && status.inferenceReady)
   const failed = status.phase === 'failed'
-  const competingModel = Array.isArray(status.competingModels) && status.competingModels.length > 0
 
   elements.progress.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
   elements.progressValue.textContent = `${progress}%`
-  elements.phaseMessage.textContent = status.message || 'Waiting for Balto.'
+  elements.phaseMessage.textContent = withoutTrailingPeriod(status.message || 'Waiting for Balto')
   elements.status.classList.toggle('ready', ready)
   elements.status.classList.toggle('error', failed)
 
@@ -78,22 +84,18 @@ function render(status) {
     elements.status.querySelector('span').textContent = 'Local stack ready'
     elements.phaseTitle.textContent = 'Balto is ready to work'
     elements.primaryLabel.textContent = 'Open Balto workspace'
-  } else if (competingModel) {
-    elements.status.querySelector('span').textContent = 'GPU ready for Balto'
-    elements.phaseTitle.textContent = 'Another model is running'
-    elements.primaryLabel.textContent = 'Close it and start Balto'
   } else if (failed) {
     elements.status.querySelector('span').textContent = 'Setup needs attention'
     elements.phaseTitle.textContent = 'Setup stopped'
-    elements.primaryLabel.textContent = 'Repair setup'
+    elements.primaryLabel.textContent = 'Finish setup'
   } else if (isWorking(status.phase)) {
     elements.status.querySelector('span').textContent = 'Setting up Balto'
     elements.phaseTitle.textContent = status.phase === 'downloading-model' ? 'Downloading the model' : 'Building the local stack'
-    elements.primaryLabel.textContent = 'Setup in progress'
+    elements.primaryLabel.textContent = 'Starting Balto'
   } else {
     elements.status.querySelector('span').textContent = 'Ready for setup'
     elements.phaseTitle.textContent = status.gpuName ? 'This machine is compatible' : 'Inspecting your machine'
-    elements.primaryLabel.textContent = status.gpuName ? 'Install Balto' : 'Check this PC'
+    elements.primaryLabel.textContent = 'Start'
   }
 
   elements.primary.disabled = busy || isWorking(status.phase)
@@ -112,36 +114,40 @@ function render(status) {
   setCheck(
     elements.model,
     status.inferenceReady,
-    'Model weights',
-    status.inferenceReady ? 'NVFP4 and DSpark are resident' : 'NVFP4 model plus DSpark draft',
+    'Qwen model',
+    status.inferenceReady ? 'Downloaded and ready' : 'Optimized for this RTX 5090',
   )
   setCheck(
     elements.workspace,
     status.workspaceReady,
     'Coding workspace',
-    status.workspaceReady ? 'Live at 127.0.0.1:3080' : 'Local tools and 80K context',
+    status.workspaceReady ? 'Ready for efficient tool calls' : 'Efficient local tool calls',
   )
 
   elements.warning.hidden = !status.warning
   elements.warningText.textContent = status.warning || ''
 
   elements.remoteToggle.checked = Boolean(status.remoteEnabled)
-  elements.remoteToggle.disabled = !status.tailscaleInstalled || !status.tailscaleSignedIn || busy
+  elements.remoteToggle.disabled = !ready || !status.tailscaleInstalled || !status.tailscaleSignedIn || busy || remoteChanging
   if (status.remoteEnabled && status.remoteUrl) {
-    elements.remoteDescription.textContent = 'Available only to devices allowed on your tailnet.'
+    elements.remoteDescription.textContent = 'Your private web app is ready'
     elements.remoteUrl.hidden = false
     elements.remoteUrl.textContent = status.remoteUrl
     elements.remoteUrl.href = status.remoteUrl
   } else {
     elements.remoteUrl.hidden = true
-    elements.remoteDescription.textContent = status.tailscaleSignedIn
-      ? `Signed in as ${status.tailscaleDnsName || 'this tower'}. Turn on private access when Balto is ready.`
-      : 'Sign in to Tailscale and open Balto from any device on your tailnet.'
+    elements.remoteDescription.textContent = !ready
+      ? 'Available after Balto starts'
+      : status.tailscaleSignedIn
+        ? 'Turn on to get your private web app link'
+        : 'Sign in to Tailscale to get your private web app link'
   }
 
   if (ready && !workspaceOpened && invoke) {
     workspaceOpened = true
-    setTimeout(() => invoke('open_workspace').catch(() => { workspaceOpened = false }), 650)
+    const fresh = freshWorkspaceRequested
+    freshWorkspaceRequested = false
+    setTimeout(() => invoke('open_workspace', { fresh }).catch(() => { workspaceOpened = false }), 650)
   }
 }
 
@@ -151,8 +157,10 @@ async function refresh() {
     render(status)
     if (!autoSetupChecked && invoke) {
       autoSetupChecked = true
-      const restartRecovery = status.phase === 'failed' && /restart|engine did not start/i.test(status.message || '')
-      if ((status.phase === 'not-installed' || restartRecovery) && status.gpuName?.includes('5090') && !status.warning) {
+      const setupRecovery = status.phase === 'failed' && Number(status.progress || 0) < 100
+      const serviceRecovery = ['degraded', 'stopped'].includes(status.phase)
+      if ((status.phase === 'not-installed' || setupRecovery || serviceRecovery) && status.gpuName?.includes('5090')) {
+        freshWorkspaceRequested = status.phase === 'not-installed' || setupRecovery
         await runAction('setup_stack')
       }
     }
@@ -163,12 +171,12 @@ async function refresh() {
   }
 }
 
-async function runAction(command) {
+async function runAction(command, payload = {}) {
   if (!invoke) return
   busy = true
   elements.primary.disabled = true
   try {
-    await invoke(command)
+    await invoke(command, payload)
     await new Promise((resolve) => setTimeout(resolve, 450))
     await refresh()
   } catch (error) {
@@ -201,7 +209,12 @@ async function installAvailableUpdate() {
     await checkForUpdates()
     return
   }
+  if (updateInstalling) return
+  updateInstalling = true
   elements.updateRow.disabled = true
+  elements.updateButton.disabled = true
+  elements.updateButton.setAttribute('aria-label', 'Installing Balto update')
+  elements.updateButton.title = 'Installing update'
   elements.updateRow.classList.add('installing')
   elements.updateTag.textContent = 'INSTALLING'
   elements.updateDetail.textContent = `Verifying and installing ${availableUpdate}`
@@ -211,31 +224,57 @@ async function installAvailableUpdate() {
     elements.updateDetail.textContent = String(error)
     elements.updateTag.textContent = 'RETRY'
     elements.updateRow.disabled = false
+    elements.updateButton.disabled = false
+    elements.updateButton.setAttribute('aria-label', 'Retry Balto update')
+    elements.updateButton.title = 'Retry update'
     elements.updateRow.classList.remove('installing')
+    updateInstalling = false
+  }
+}
+
+async function changeRemoteAccess(enabled) {
+  if (!invoke || remoteChanging) return
+  remoteChanging = true
+  elements.remoteToggle.disabled = true
+  elements.remoteDescription.textContent = enabled ? 'Creating your private web app link' : 'Turning off private access'
+  try {
+    await invoke(enabled ? 'enable_remote' : 'disable_remote')
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const status = await invoke('get_status')
+      if (status.phase === 'failed') throw new Error(status.message)
+      if (Boolean(status.remoteEnabled) === enabled) {
+        render(status)
+        return
+      }
+    }
+    throw new Error(enabled ? 'The private link is taking longer than expected' : 'Private access is still turning off')
+  } catch (error) {
+    elements.phaseMessage.textContent = withoutTrailingPeriod(error)
+  } finally {
+    remoteChanging = false
+    await refresh()
   }
 }
 
 elements.primary.addEventListener('click', async () => {
   if (currentStatus?.workspaceReady) {
-    await runAction('open_workspace')
+    await runAction('open_workspace', { fresh: false })
     return
   }
-  if (Array.isArray(currentStatus?.competingModels) && currentStatus.competingModels.length > 0) {
-    await runAction('take_over_gpu')
-    return
-  }
+  freshWorkspaceRequested = true
   await runAction('setup_stack')
 })
 
 elements.remoteToggle.addEventListener('change', async () => {
-  await runAction(elements.remoteToggle.checked ? 'enable_remote' : 'disable_remote')
+  await changeRemoteAccess(elements.remoteToggle.checked)
 })
 
 elements.settings.addEventListener('click', (event) => {
   if (event.target === elements.settings) elements.settings.close()
 })
 document.querySelector('#settings-button').addEventListener('click', () => elements.settings.showModal())
-elements.updateButton.addEventListener('click', () => elements.settings.showModal())
+elements.updateButton.addEventListener('click', installAvailableUpdate)
 elements.updateRow.addEventListener('click', installAvailableUpdate)
 document.querySelector('#view-log').addEventListener('click', () => elements.log.showModal())
 document.querySelector('#close-log').addEventListener('click', () => elements.log.close())

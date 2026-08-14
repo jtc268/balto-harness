@@ -6,6 +6,27 @@
 
   document.title = 'Balto Speedrunner'
 
+  function openFreshSession() {
+    if (new URLSearchParams(location.search).get('balto') !== 'new') return
+    history.replaceState(null, '', `${location.pathname}${location.hash}`)
+
+    const startedAt = Date.now()
+    const tryOpen = () => {
+      const button = [...document.querySelectorAll('button[aria-label]')].find((candidate) => {
+        const label = candidate.getAttribute('aria-label') || ''
+        return /^(new session|new chat)$/i.test(label) || label.includes('新建会话')
+      })
+      if (button) {
+        button.click()
+        return
+      }
+      if (Date.now() - startedAt < 30000) setTimeout(tryOpen, 100)
+    }
+    tryOpen()
+  }
+
+  openFreshSession()
+
   const style = document.createElement('style')
   style.textContent = `
     #balto-live-bar {

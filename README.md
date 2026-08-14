@@ -27,7 +27,7 @@ These are measurements from one machine, not a guarantee for every prompt. Promp
 4. Creates a persistent Docker volume for model files, so interrupted downloads resume and updates do not erase weights.
 5. Starts `RadixArk/Qwen3.8-27B-NVFP4` with `RadixArk/Qwen3.8-27B-DSpark` using the tested 80K configuration.
 6. Installs the coding workspace into Balto's private app directory.
-7. Runs one model at a time and refuses to compete with another app already using significant GPU memory.
+7. Reminds the owner to unload other local models before starting Balto.
 8. Applies future performance configuration updates without deleting the persistent model cache.
 
 The small app installer does not contain the Docker image or model weights. First launch requires a large download and at least 90 GB of free disk space.
@@ -36,7 +36,7 @@ The small app installer does not contain the Docker image or model weights. Firs
 
 Balto can use Tailscale Serve after the owner signs in to Tailscale. It keeps the workspace bound to `127.0.0.1` and exposes private HTTPS endpoints only inside the user's tailnet. Balto does not enable Tailscale Funnel or open a public router port.
 
-The Settings screen shows the exact private URL and lets the owner turn remote access off without changing unrelated Tailscale routes.
+The onboarding screen shows the exact private URL and lets the owner turn remote access off without changing unrelated Tailscale routes.
 
 ## Tested configuration
 
