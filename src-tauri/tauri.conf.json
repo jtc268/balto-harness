@@ -1,0 +1,62 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Balto Harness",
+  "version": "0.1.0",
+  "identifier": "com.adore.balto-harness",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Balto Harness",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 960,
+        "minHeight": 660,
+        "center": true,
+        "resizable": true,
+        "decorations": true,
+        "backgroundColor": "#0d0f12"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:3080 http://127.0.0.1:30100"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"],
+    "publisher": "Adore LLC",
+    "copyright": "Copyright 2026 Adore LLC",
+    "category": "DeveloperTool",
+    "shortDescription": "Fast local coding agent for RTX 5090",
+    "longDescription": "Installs and runs a pinned Qwen 3.8 27B NVFP4 coding stack tuned for a single RTX 5090.",
+    "resources": {
+      "../runtime/": "runtime/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      },
+      "allowDowngrades": false
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1RThFQjM4RjA2RUNDODgKUldTSXpHN3dPT3ZvVlVPeWR6aTREMnFiY2pCNWxmR0tvTkVrY2JsTThCUExibWNBcXFQVjRreTUK",
+      "endpoints": [
+        "https://github.com/jtc268/balto-harness/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

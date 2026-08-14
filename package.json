@@ -1,0 +1,18 @@
+{
+  "name": "balto-harness",
+  "private": true,
+  "version": "0.1.0",
+  "description": "One-click local coding agent for RTX 5090 systems",
+  "license": "MIT",
+  "author": "Adore LLC",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "check": "node --check src/app.js && node --check runtime/gateway.mjs && node --check runtime/patch-dsh.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.11.4"
+  }
+}

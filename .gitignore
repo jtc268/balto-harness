@@ -1,0 +1,11 @@
+/node_modules/
+/src-tauri/target/
+/dist/
+/.test-data/
+/.tauri-signing-private-key
+/.tauri-signing-private-key.pub
+/.tauri-signing-password
+/*.log
+/*.tmp
+.DS_Store
+Thumbs.db

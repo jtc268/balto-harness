@@ -1,0 +1,33 @@
+agent-default-model:
+  provider: sglang
+  model: qwen3.8-27b-nvfp4-dspark
+  reasoningEffort: off
+
+permission:
+  defaultPreset: workspace-write
+
+llm-pi-ai:
+  providers:
+    sglang:
+      displayName: Balto Local
+      api: openai-completions
+      baseURL: http://127.0.0.1:30100/v1
+      headers:
+        Authorization: Bearer local-balto
+      defaultContextWindow: 80000
+      defaultMaxTokens: 32768
+      defaultInput:
+        - text
+      models:
+        - id: qwen3.8-27b-nvfp4-dspark
+          name: Qwen 3.8 27B NVFP4 + DSpark
+          contextWindow: 80000
+          maxTokens: 32768
+          input:
+            - text
+          reasoningEfforts:
+            off: none
+            high: high
+          compat:
+            thinkingFormat: deepseek
+            supportsReasoningEffort: false

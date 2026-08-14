@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0d0f12" />
+    <title>Balto Harness</title>
+    <link rel="icon" href="/balto-mark.svg" />
+    <link rel="stylesheet" href="/styles.css" />
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <div class="noise" aria-hidden="true"></div>
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Balto Harness home">
+        <img src="/balto-mark.svg" alt="" />
+        <span>Balto</span>
+        <small>HARNESS</small>
+      </a>
+      <div class="topbar-actions">
+        <span class="status-pill" id="top-status"><i></i><span>Checking tower</span></span>
+        <button class="icon-button" id="settings-button" type="button" aria-label="Open settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Zm8 3.6-.1-1.1 2-1.6-2-3.4-2.5 1a8 8 0 0 0-1.9-1.1L15.1 3h-4l-.4 2.8a8 8 0 0 0-1.9 1.1l-2.5-1-2 3.4 2 1.6a8 8 0 0 0 0 2.2l-2 1.6 2 3.4 2.5-1a8 8 0 0 0 1.9 1.1l.4 2.8h4l.4-2.8a8 8 0 0 0 1.9-1.1l2.5 1 2-3.4-2-1.6.1-1.1Z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="eyebrow"><span></span> Built for one RTX 5090</div>
+        <h1>Your fastest local<br />coding machine.</h1>
+        <p class="hero-copy">Qwen 3.8 27B, an 80K context window, and the coding workspace you already know. Balto prepares the machine and opens chat for you.</p>
+        <div class="hero-actions">
+          <button class="primary-button" id="primary-action" type="button">
+            <span>Check this PC</span>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 6 6-6 6"/></svg>
+          </button>
+          <button class="text-button" id="view-log" type="button">View setup log</button>
+        </div>
+      </section>
+
+      <section class="metrics" aria-label="Performance configuration">
+        <article class="metric-card speed-card">
+          <div class="card-label">CLEAN DECODE</div>
+          <div class="speed-value"><span>321</span><small>TOK/S</small></div>
+          <div class="sparkline" aria-hidden="true">
+            <svg viewBox="0 0 320 72" preserveAspectRatio="none"><path class="spark-fill" d="M0 60C22 55 25 36 48 39s26 12 44 4 17-28 40-23 30 22 52 15 32-25 50-14 22 25 45 14 29-23 51-8v45H0Z"/><path class="spark-stroke" d="M0 60C22 55 25 36 48 39s26 12 44 4 17-28 40-23 30 22 52 15 32-25 50-14 22 25 45 14 29-23 51-8"/></svg>
+          </div>
+          <p>Measured on this stack with a 4,096-token decode probe.</p>
+        </article>
+        <article class="metric-card">
+          <div class="card-label">REAL CODING RUN</div>
+          <div class="metric-value">154 <small>TOK/S</small></div>
+          <p>Observed across an 18-step TypeScript task with live tool calls.</p>
+        </article>
+        <article class="metric-card">
+          <div class="card-label">WORKING CONTEXT</div>
+          <div class="metric-value">80K <small>TOKENS</small></div>
+          <p>Large enough for repository work while keeping the 5090 fast.</p>
+        </article>
+      </section>
+
+      <section class="system-panel">
+        <div class="panel-heading">
+          <div>
+            <div class="eyebrow"><span></span> System readiness</div>
+            <h2 id="phase-title">Inspecting your machine</h2>
+          </div>
+          <div class="progress-ring" id="progress-ring" style="--progress: 4"><strong id="progress-value">4%</strong></div>
+        </div>
+        <p class="phase-message" id="phase-message">Balto is checking the GPU, Docker, Tailscale, and local services.</p>
+
+        <div class="check-grid">
+          <div class="check-item" id="check-gpu"><i></i><div><strong>RTX 5090</strong><span>Detecting GPU and VRAM</span></div></div>
+          <div class="check-item" id="check-docker"><i></i><div><strong>Inference engine</strong><span>High-speed local runtime</span></div></div>
+          <div class="check-item" id="check-model"><i></i><div><strong>Model weights</strong><span>Qwen 3.8 27B plus speed draft</span></div></div>
+          <div class="check-item" id="check-workspace"><i></i><div><strong>Coding workspace</strong><span>Local tools and 80K context</span></div></div>
+        </div>
+
+        <div class="warning-card" id="warning-card" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3Zm0 6v5m0 3v1"/></svg>
+          <span id="warning-text"></span>
+        </div>
+      </section>
+
+      <section class="remote-card">
+        <div class="remote-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15a4 4 0 0 1 .5-8A6 6 0 0 1 17 8a4 4 0 1 1 1 7H5Zm7-4v9m-3-3 3 3 3-3"/></svg>
+        </div>
+        <div class="remote-copy">
+          <strong>Private remote steering</strong>
+          <span id="remote-description">Sign in to Tailscale and open Balto from any device on your tailnet.</span>
+          <a id="remote-url" href="#" hidden></a>
+        </div>
+        <label class="switch" aria-label="Enable private remote access">
+          <input id="remote-toggle" type="checkbox" />
+          <span></span>
+        </label>
+      </section>
+    </main>
+
+    <dialog id="settings-dialog">
+      <form method="dialog" class="settings-sheet">
+        <div class="settings-head">
+          <div><span>SETTINGS</span><h2>Balto Harness</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Close settings" type="submit">×</button>
+        </div>
+        <div class="setting-row">
+          <div><strong>Model configuration</strong><span>Qwen 3.8 27B NVFP4, DSpark, 80K context, effort off</span></div>
+          <span class="tag">PINNED</span>
+        </div>
+        <div class="setting-row">
+          <div><strong>Single-model guard</strong><span>Balto checks for competing GPU workloads before launch</span></div>
+          <span class="tag green">ON</span>
+        </div>
+        <div class="setting-row">
+          <div><strong>Automatic updates</strong><span>Signed releases from the Balto GitHub repository</span></div>
+          <span class="tag green">ON</span>
+        </div>
+        <button class="coffee-button" id="coffee-button" type="button">
+          <span>☕</span><div><strong>Buy me a coffee</strong><small>Support fast local AI for more GPUs</small></div>
+        </button>
+        <p class="legal">Balto Harness © 2026 Adore LLC. MIT licensed. Agent engine includes software from DeepSeek under MIT. Inference powered by SGLang. Model weights use their own licenses.</p>
+      </form>
+    </dialog>
+
+    <dialog id="log-dialog">
+      <div class="log-sheet">
+        <div class="settings-head"><div><span>SETUP LOG</span><h2>What Balto is doing</h2></div><button class="icon-button" id="close-log" aria-label="Close log" type="button">×</button></div>
+        <pre id="log-output">Waiting for setup to begin.</pre>
+      </div>
+    </dialog>
+  </body>
+</html>
