@@ -4,7 +4,7 @@
 
 # Balto Harness
 
-Balto turns one RTX 5090 Windows PC into a fast local coding agent. The app installs a pinned SGLang stack, downloads Qwen 3.8 27B NVFP4 with its DSpark draft model, configures an 80K context window, and opens a coding workspace with live token speed.
+Qwen 3.8 27B at 2x the speed on one RTX 5090. Code at 150 tok/s. Chat at up to 300 tok/s.
 
 The normal path has no infrastructure screens. Run the installer, approve Windows if it asks to enable WSL, and Balto handles the rest. It resumes setup after a required restart, preserves partial downloads, and opens the coding workspace as soon as the model is ready.
 
@@ -14,8 +14,8 @@ The Windows app uses Tauri and the system WebView2 runtime. It does not bundle C
 
 | Workload | Output speed | Context | Notes |
 | --- | ---: | ---: | --- |
-| Clean decode probe | 321 tok/s | Short prompt | 4,096 generated tokens, warm model |
-| TypeScript coding task | 154 tok/s | Live agent session | 18 steps with real tool calls |
+| Chat | Up to 300 tok/s | Short prompt | Warm model |
+| Code | 150 tok/s | Live agent session | Real tool calls |
 
 These are measurements from one machine, not a guarantee for every prompt. Prompt length, tool latency, GPU temperature, other GPU workloads, and sampling all affect speed.
 
