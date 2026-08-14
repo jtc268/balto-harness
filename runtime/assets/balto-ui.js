@@ -40,8 +40,69 @@
     continueButton.click()
   }
 
+  function brandVisibleWorkspace() {
+    const wordmark = [...document.querySelectorAll('button[aria-label]')].find((candidate) =>
+      candidate.querySelector(':scope > svg[viewBox="0 0 182 24"]'),
+    )
+    if (wordmark && !wordmark.dataset.baltoBrand) {
+      wordmark.dataset.baltoBrand = 'true'
+      const icon = document.createElement('img')
+      icon.src = '/assets/balto-mark.svg'
+      icon.alt = ''
+      const name = document.createElement('span')
+      name.className = 'balto-sidebar-name'
+      name.textContent = 'Balto'
+      const label = document.createElement('span')
+      label.className = 'balto-sidebar-label'
+      label.textContent = 'Speedrunner'
+      const text = document.createElement('span')
+      text.className = 'balto-sidebar-wordmark'
+      text.append(name, label)
+      wordmark.replaceChildren(icon, text)
+    }
+
+    const heroText = [...document.querySelectorAll('span')].find((candidate) =>
+      (candidate.textContent || '').trim() === 'Into the Unknown',
+    )
+    if (heroText) {
+      heroText.textContent = 'Ready to run'
+      const hero = heroText.parentElement
+      const iconContainer = hero?.querySelector('span:has(> svg)')
+      if (iconContainer && !iconContainer.dataset.baltoHero) {
+        iconContainer.dataset.baltoHero = 'true'
+        const icon = document.createElement('img')
+        icon.src = '/assets/balto-mark.svg'
+        icon.alt = ''
+        iconContainer.replaceChildren(icon)
+      }
+    }
+  }
+
+  function simplifyEffortControls() {
+    for (const effort of document.querySelectorAll('[class*="triggerEffort"]')) {
+      if ((effort.textContent || '').trim() !== 'Off') continue
+      effort.style.display = 'none'
+      const trigger = effort.closest('button')
+      if (!trigger) continue
+      trigger.title = (trigger.title || '').replace(/\s+\S+\s+Off\s*$/, '')
+      trigger.setAttribute(
+        'aria-label',
+        (trigger.getAttribute('aria-label') || '').replace(/,?\s*reasoning effort Off\s*$/i, ''),
+      )
+    }
+
+    for (const label of document.querySelectorAll('[class*="cellLabel"]')) {
+      if ((label.textContent || '').trim() !== 'Effort') continue
+      const row = label.closest('[role="menuitem"]')
+      const value = row?.querySelector('[class*="cellValue"]')
+      if (row && (value?.textContent || '').trim() === 'Off') row.style.display = 'none'
+    }
+  }
+
   openFreshSession()
   dismissInternalTestingNotice()
+  brandVisibleWorkspace()
+  simplifyEffortControls()
 
   const style = document.createElement('style')
   style.textContent = `
@@ -72,6 +133,13 @@
     #balto-live-bar .balto-value { color: var(--balto-speed); font: 650 26px/1 "Cascadia Code", Consolas, monospace; letter-spacing: -1.6px; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in srgb, var(--balto-speed) 18%, transparent); }
     #balto-live-bar .balto-unit { color: rgba(245,247,248,.58); font-size: 8px; font-weight: 800; letter-spacing: 1px; }
     #balto-live-bar[data-state="idle"] .balto-value { color: #707780; text-shadow: none; }
+    [data-balto-brand="true"] { width: auto !important; display: inline-flex !important; align-items: center !important; gap: 9px !important; color: #f5f7f8 !important; }
+    [data-balto-brand="true"] > img { width: 27px !important; height: 27px !important; flex: 0 0 27px; }
+    .balto-sidebar-wordmark { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; font-family: Inter, "Segoe UI", sans-serif; }
+    .balto-sidebar-name { font-size: 15px; font-weight: 760; letter-spacing: -.3px; }
+    .balto-sidebar-label { color: rgba(245,247,248,.48); font-size: 7px; font-weight: 850; letter-spacing: 1.35px; text-transform: uppercase; }
+    [data-balto-hero="true"] { display: inline-flex !important; align-items: center; justify-content: center; }
+    [data-balto-hero="true"] > img { width: 31px !important; height: 31px !important; }
     @media (max-width: 900px) { #balto-live-bar .balto-brand { display: none; } }
   `
   document.head.append(style)
@@ -132,5 +200,7 @@
       }
     }
     dismissInternalTestingNotice()
+    brandVisibleWorkspace()
+    simplifyEffortControls()
   }).observe(document.body, { childList: true, subtree: true })
 })()

@@ -1,10 +1,15 @@
 $ErrorActionPreference = 'Stop'
 
 $scriptPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'runtime\balto.ps1'
+$qaScriptPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts\qa-clean-install.ps1'
 $tokens = $null
 $parseErrors = $null
 $ast = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
 if ($parseErrors.Count -gt 0) { throw $parseErrors[0].Message }
+$qaTokens = $null
+$qaParseErrors = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile($qaScriptPath, [ref]$qaTokens, [ref]$qaParseErrors)
+if ($qaParseErrors.Count -gt 0) { throw $qaParseErrors[0].Message }
 
 foreach ($name in @('Write-Log', 'ConvertTo-NativeArgument', 'Invoke-LoggedNative')) {
   $functionAst = $ast.Find({

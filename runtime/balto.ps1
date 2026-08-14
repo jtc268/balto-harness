@@ -706,6 +706,26 @@ function Install-Balto {
   Refresh-Status | Out-Null
 }
 
+$actionMutex = [System.Threading.Mutex]::new($false, 'Local\Adore.BaltoSpeedrunner.Action')
+$actionMutexAcquired = $false
+try {
+  try {
+    $waitMilliseconds = if ($Action -eq 'status') { 0 } else { 3000 }
+    $actionMutexAcquired = $actionMutex.WaitOne($waitMilliseconds)
+  }
+  catch [System.Threading.AbandonedMutexException] {
+    $actionMutexAcquired = $true
+  }
+  if (-not $actionMutexAcquired) {
+    Write-Log "Action skipped because another Balto action is running: $Action"
+    exit 0
+  }
+}
+catch {
+  $actionMutex.Dispose()
+  throw
+}
+
 try {
   Write-Log "Action started: $Action"
   switch ($Action) {
@@ -746,4 +766,8 @@ catch {
   if ($_.ScriptStackTrace) { Write-Log "Stack: $($_.ScriptStackTrace -replace '[\r\n]+', ' | ')" }
   Update-State @{ phase = 'failed'; message = $message; warning = $message }
   exit 1
+}
+finally {
+  if ($actionMutexAcquired) { $actionMutex.ReleaseMutex() }
+  $actionMutex.Dispose()
 }
