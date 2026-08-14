@@ -21,12 +21,17 @@ const elements = {
   settings: document.querySelector('#settings-dialog'),
   log: document.querySelector('#log-dialog'),
   logOutput: document.querySelector('#log-output'),
+  updateButton: document.querySelector('#update-button'),
+  updateRow: document.querySelector('#update-row'),
+  updateDetail: document.querySelector('#update-detail'),
+  updateTag: document.querySelector('#update-tag'),
 }
 
 let currentStatus = null
 let busy = false
 let autoSetupChecked = false
 let workspaceOpened = false
+let availableUpdate = null
 
 const previewStatus = {
   phase: 'not-installed',
@@ -173,6 +178,43 @@ async function runAction(command) {
   }
 }
 
+async function checkForUpdates() {
+  if (!invoke) return
+  try {
+    const update = await invoke('check_for_updates')
+    availableUpdate = update.availableVersion || null
+    elements.updateDetail.textContent = availableUpdate
+      ? `Balto Speedrunner ${availableUpdate} is ready`
+      : `Balto Speedrunner ${update.currentVersion}`
+    elements.updateTag.textContent = availableUpdate ? `v${availableUpdate}` : 'CURRENT'
+    elements.updateTag.classList.toggle('green', !availableUpdate)
+    elements.updateRow.classList.toggle('available', Boolean(availableUpdate))
+    elements.updateButton.hidden = !availableUpdate
+  } catch {
+    elements.updateDetail.textContent = 'Signed updates check automatically'
+    elements.updateTag.textContent = 'AUTO'
+  }
+}
+
+async function installAvailableUpdate() {
+  if (!availableUpdate || !invoke) {
+    await checkForUpdates()
+    return
+  }
+  elements.updateRow.disabled = true
+  elements.updateRow.classList.add('installing')
+  elements.updateTag.textContent = 'INSTALLING'
+  elements.updateDetail.textContent = `Verifying and installing ${availableUpdate}`
+  try {
+    await invoke('install_update')
+  } catch (error) {
+    elements.updateDetail.textContent = String(error)
+    elements.updateTag.textContent = 'RETRY'
+    elements.updateRow.disabled = false
+    elements.updateRow.classList.remove('installing')
+  }
+}
+
 elements.primary.addEventListener('click', async () => {
   if (currentStatus?.workspaceReady) {
     await runAction('open_workspace')
@@ -193,6 +235,8 @@ elements.settings.addEventListener('click', (event) => {
   if (event.target === elements.settings) elements.settings.close()
 })
 document.querySelector('#settings-button').addEventListener('click', () => elements.settings.showModal())
+elements.updateButton.addEventListener('click', () => elements.settings.showModal())
+elements.updateRow.addEventListener('click', installAvailableUpdate)
 document.querySelector('#view-log').addEventListener('click', () => elements.log.showModal())
 document.querySelector('#close-log').addEventListener('click', () => elements.log.close())
 document.querySelector('#coffee-button').addEventListener('click', async () => {
@@ -207,4 +251,5 @@ elements.remoteUrl.addEventListener('click', async (event) => {
 })
 
 refresh()
+setTimeout(checkForUpdates, 1800)
 setInterval(refresh, 1800)

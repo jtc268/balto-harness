@@ -82,6 +82,8 @@ Balto supports two different signatures:
 - Tauri updater signatures protect update artifacts and are required by the in-app updater.
 - Windows Authenticode identifies Adore LLC as the publisher and prevents the unsigned-app SmartScreen warning.
 
+Every install shows its version in Settings. A green update arrow appears when GitHub publishes a newer signed release; one click verifies, installs, and relaunches it.
+
 The release workflow requires an Azure Artifact Signing account and certificate profile. It refuses to publish a release without those credentials. Local development builds remain unsigned.
 
 ## License and credits

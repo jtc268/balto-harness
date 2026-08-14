@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -35,6 +36,13 @@ struct BaltoStatus {
     competing_models: Vec<String>,
     warning: Option<String>,
     updated_at: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateStatus {
+    current_version: String,
+    available_version: Option<String>,
 }
 
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -160,6 +168,39 @@ fn disable_remote(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<UpdateStatus, String> {
+    let current_version = app.package_info().version.to_string();
+    let available_version = app
+        .updater()
+        .map_err(|error| format!("Could not initialize updates: {error}"))?
+        .check()
+        .await
+        .map_err(|error| format!("Could not check for updates: {error}"))?
+        .map(|update| update.version);
+    Ok(UpdateStatus {
+        current_version,
+        available_version,
+    })
+}
+
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    let update = app
+        .updater()
+        .map_err(|error| format!("Could not initialize updates: {error}"))?
+        .check()
+        .await
+        .map_err(|error| format!("Could not check for updates: {error}"))?
+        .ok_or_else(|| "Balto Speedrunner is already current.".to_string())?;
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|error| format!("The signed update could not be installed: {error}"))?;
+    app.request_restart();
+    Ok(())
+}
+
+#[tauri::command]
 fn open_workspace(app: AppHandle) -> Result<(), String> {
     if !read_status(&app)?.workspace_ready {
         return Err("Balto is still starting.".into());
@@ -191,6 +232,8 @@ pub fn run() {
             stop_stack,
             enable_remote,
             disable_remote,
+            check_for_updates,
+            install_update,
             open_workspace
         ])
         .run(tauri::generate_context!())
