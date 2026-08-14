@@ -51,6 +51,35 @@ function Write-Log([string]$Message) {
   [System.IO.File]::AppendAllText($logPath, "[$stamp] $Message`r`n")
 }
 
+function ConvertTo-NativeArgument([AllowEmptyString()][string]$Argument) {
+  if ($null -eq $Argument -or $Argument.Length -eq 0) { return '""' }
+  if ($Argument -notmatch '[\s"]') { return $Argument }
+
+  $builder = [System.Text.StringBuilder]::new()
+  [void]$builder.Append('"')
+  $backslashes = 0
+  foreach ($character in $Argument.ToCharArray()) {
+    if ($character -eq '\') {
+      $backslashes++
+      continue
+    }
+    if ($character -eq '"') {
+      if ($backslashes -gt 0) { [void]$builder.Append(('\' * ($backslashes * 2))) }
+      [void]$builder.Append('\"')
+      $backslashes = 0
+      continue
+    }
+    if ($backslashes -gt 0) {
+      [void]$builder.Append(('\' * $backslashes))
+      $backslashes = 0
+    }
+    [void]$builder.Append($character)
+  }
+  if ($backslashes -gt 0) { [void]$builder.Append(('\' * ($backslashes * 2))) }
+  [void]$builder.Append('"')
+  return $builder.ToString()
+}
+
 function Invoke-LoggedNative {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
@@ -59,19 +88,37 @@ function Invoke-LoggedNative {
     [switch]$AllowFailure
   )
 
-  $previousErrorActionPreference = $ErrorActionPreference
+  $process = $null
   try {
-    # npm, Docker, winget, and Tailscale legitimately write progress and warnings
-    # to stderr. Capture that output without promoting it to a terminating error.
-    $ErrorActionPreference = 'Continue'
-    $output = @(& $FilePath @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    # Native tools routinely write normal progress and warnings to stderr.
+    # Use Process directly so PowerShell can never mistake those lines for failures.
+    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $startInfo.FileName = $FilePath
+    $startInfo.Arguments = (($Arguments | ForEach-Object { ConvertTo-NativeArgument ([string]$_) }) -join ' ')
+    $startInfo.UseShellExecute = $false
+    $startInfo.CreateNoWindow = $true
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+
+    $process = [System.Diagnostics.Process]::new()
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw "Could not start $Prefix." }
+    $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $process.WaitForExit()
+    $stdout = $stdoutTask.Result
+    $stderr = $stderrTask.Result
+    $exitCode = $process.ExitCode
   }
   finally {
-    $ErrorActionPreference = $previousErrorActionPreference
+    if ($process) { $process.Dispose() }
   }
 
-  foreach ($line in $output) { Write-Log "${Prefix}: $line" }
+  foreach ($stream in @($stdout, $stderr)) {
+    foreach ($line in ($stream -split '\r?\n')) {
+      if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Log "${Prefix}: $line" }
+    }
+  }
   if ($exitCode -ne 0 -and -not $AllowFailure) {
     throw "$Prefix exited with code $exitCode. Open the setup log for details."
   }
@@ -409,11 +456,24 @@ function Ensure-WorkspaceRuntime {
   $yamlModule = Join-Path $dshRoot 'node_modules\js-yaml\dist\js-yaml.mjs'
   if (-not (Test-Path -LiteralPath $dshEntry) -or -not (Test-Path -LiteralPath $yamlModule)) {
     Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Installing the Balto coding workspace.' }
-    Write-Log 'Installing the pinned agent interface and compatible YAML runtime.'
-    Invoke-LoggedNative -FilePath $nodeExe -Arguments @($npmCli, 'install', '--prefix', $dshRoot, '@deepseek-ai/dsh@0.1.0-rc.6', 'js-yaml@4.2.0', '--omit=dev', '--no-audit', '--no-fund') -Prefix 'npm'
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+      Write-Log "Installing the pinned coding workspace. Attempt $attempt of 3."
+      try {
+        Invoke-LoggedNative -FilePath $nodeExe -Arguments @($npmCli, 'install', '--prefix', $dshRoot, '@deepseek-ai/dsh@0.1.0-rc.6', 'js-yaml@4.2.0', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error') -Prefix 'workspace install'
+      }
+      catch {
+        Write-Log "Workspace install attempt $attempt needs another pass: $($_.Exception.Message)"
+      }
+      if ((Test-Path -LiteralPath $dshEntry) -and (Test-Path -LiteralPath $yamlModule)) { break }
+      if ($attempt -lt 3) {
+        Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Finishing the Balto coding workspace. Downloaded files are being reused.' }
+        Start-Sleep -Seconds (2 * $attempt)
+      }
+    }
   }
-  if (-not (Test-Path -LiteralPath $dshEntry)) { throw 'The Balto coding workspace did not install correctly.' }
-  if (-not (Test-Path -LiteralPath $yamlModule)) { throw 'The Balto coding workspace YAML runtime did not install correctly.' }
+  if (-not (Test-Path -LiteralPath $dshEntry) -or -not (Test-Path -LiteralPath $yamlModule)) {
+    throw 'Balto could not finish the coding workspace. Your downloaded files are safe and setup will resume automatically.'
+  }
   Invoke-LoggedNative -FilePath $nodeExe -Arguments @((Join-Path $Resources 'patch-dsh.mjs'), $dshRoot, $Resources) -Prefix 'brand'
   Copy-Item -LiteralPath (Join-Path $Resources 'templates\settings.yaml') -Destination (Join-Path $dshHome 'settings.yaml') -Force
   Ensure-DefaultWorkspace

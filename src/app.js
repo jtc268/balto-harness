@@ -44,13 +44,15 @@ const elements = {
 
 let currentStatus = null
 let busy = false
-let autoSetupChecked = false
 let workspaceOpened = false
 let freshWorkspaceRequested = false
 let availableUpdate = null
 let remoteChanging = false
 let updateInstalling = false
 let observedSetupStartedAt = null
+let setupRecoveryAttempts = 0
+let setupRecoveryTimer = null
+const MAX_SETUP_RECOVERY_ATTEMPTS = 4
 
 const idlePreviewStatus = {
   phase: 'not-installed',
@@ -192,22 +194,26 @@ function inferredStage(status, progress, ready) {
   return 'system-check'
 }
 
-function renderJourney(status, progress, ready, failed) {
+function renderJourney(status, progress, ready, failed, recovering) {
   const working = isWorking(status.phase)
   const stage = inferredStage(status, progress, ready)
   const experience = stageExperience[stage] || stageExperience['system-check']
   const step = experience.step
 
-  document.body.classList.toggle('setup-active', working && !failed)
-  document.body.classList.toggle('setup-failed', failed)
+  document.body.classList.toggle('setup-active', (working && !failed) || recovering)
+  document.body.classList.toggle('setup-failed', failed && !recovering)
   document.body.classList.toggle('setup-complete', ready)
   elements.track.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
-  elements.journeyTitle.textContent = failed ? 'Balto paused here' : experience.title
-  elements.journeyDetail.textContent = failed
+  elements.journeyTitle.textContent = recovering ? 'Balto is finishing setup' : failed ? 'Balto paused here' : experience.title
+  elements.journeyDetail.textContent = recovering
+    ? 'This step needs another pass. Balto is retrying automatically and reusing everything already downloaded'
+    : failed
     ? 'Your completed work is safe. Balto will continue from this point when setup resumes'
     : experience.detail
   elements.journeyStep.textContent = ready ? '4 steps complete' : `Step ${step + 1} of 4`
-  elements.journeyNote.textContent = failed
+  elements.journeyNote.textContent = recovering
+    ? 'No action needed. Balto will keep moving as soon as this step is ready'
+    : failed
     ? 'Open the setup log for the exact issue, then choose Finish setup to continue'
     : experience.note
 
@@ -233,7 +239,7 @@ function renderJourney(status, progress, ready, failed) {
     if (rate > 0) pieces.push(`${rate.toFixed(0)} MB/s`)
     elements.downloadDetail.textContent = pieces.join('  •  ')
   } else {
-    elements.downloadDetail.textContent = failed ? withoutTrailingPeriod(status.message) : experience.activity
+    elements.downloadDetail.textContent = recovering ? 'Retrying this step automatically' : failed ? withoutTrailingPeriod(status.message) : experience.activity
   }
 
   elements.setupSteps.forEach((element, index) => {
@@ -248,18 +254,23 @@ function render(status) {
   const progress = Number(status.progress || 0)
   const ready = Boolean(status.workspaceReady && status.inferenceReady)
   const failed = status.phase === 'failed'
+  const recovering = failed && canRecoverAutomatically(status) && setupRecoveryAttempts < MAX_SETUP_RECOVERY_ATTEMPTS
 
   elements.progress.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
   elements.progressValue.textContent = `${progress}%`
   elements.phaseMessage.textContent = withoutTrailingPeriod(status.message || 'Waiting for Balto')
-  renderJourney(status, progress, ready, failed)
+  renderJourney(status, progress, ready, failed, recovering)
   elements.status.classList.toggle('ready', ready)
-  elements.status.classList.toggle('error', failed)
+  elements.status.classList.toggle('error', failed && !recovering)
 
   if (ready) {
     elements.status.querySelector('span').textContent = 'Local stack ready'
     elements.phaseTitle.textContent = 'Balto is ready to work'
     elements.primaryLabel.textContent = 'Open Balto workspace'
+  } else if (recovering) {
+    elements.status.querySelector('span').textContent = 'Setup is recovering'
+    elements.phaseTitle.textContent = 'Balto is finishing setup'
+    elements.primaryLabel.textContent = 'Retrying automatically'
   } else if (failed) {
     elements.status.querySelector('span').textContent = 'Setup needs attention'
     elements.phaseTitle.textContent = 'Setup stopped'
@@ -274,7 +285,7 @@ function render(status) {
     elements.primaryLabel.textContent = 'Start'
   }
 
-  elements.primary.disabled = busy || isWorking(status.phase)
+  elements.primary.disabled = busy || isWorking(status.phase) || recovering
   setCheck(
     elements.gpu,
     Boolean(status.gpuName?.includes('5090')),
@@ -300,8 +311,8 @@ function render(status) {
     status.workspaceReady ? 'Documents\\Balto is ready' : 'Documents\\Balto with efficient local tool calls',
   )
 
-  elements.warning.hidden = !status.warning
-  elements.warningText.textContent = status.warning || ''
+  elements.warning.hidden = !status.warning || recovering
+  elements.warningText.textContent = recovering ? '' : status.warning || ''
 
   elements.remoteToggle.checked = Boolean(status.remoteEnabled)
   elements.remoteToggle.disabled = !ready || !status.tailscaleInstalled || !status.tailscaleSignedIn || busy || remoteChanging
@@ -327,18 +338,35 @@ function render(status) {
   }
 }
 
+function canRecoverAutomatically(status) {
+  if (!invoke || !status.gpuName?.includes('5090')) return false
+  if (status.workspaceReady && status.inferenceReady) return false
+  if (status.phase === 'not-installed') return true
+  if (status.phase === 'failed') return Number(status.progress || 0) < 100
+  return ['degraded', 'stopped'].includes(status.phase)
+}
+
+function scheduleAutomaticRecovery(status) {
+  if (!canRecoverAutomatically(status) || busy || setupRecoveryTimer || setupRecoveryAttempts >= MAX_SETUP_RECOVERY_ATTEMPTS) return
+  const delay = status.phase === 'not-installed' ? 250 : Math.min(12000, 1500 * 2 ** setupRecoveryAttempts)
+  setupRecoveryAttempts += 1
+  setupRecoveryTimer = setTimeout(async () => {
+    setupRecoveryTimer = null
+    freshWorkspaceRequested = status.phase === 'not-installed' || status.phase === 'failed'
+    await runAction('setup_stack')
+  }, delay)
+}
+
 async function refresh() {
   try {
     const status = invoke ? await invoke('get_status') : previewStatus
     render(status)
-    if (!autoSetupChecked && invoke) {
-      autoSetupChecked = true
-      const setupRecovery = status.phase === 'failed' && Number(status.progress || 0) < 100
-      const serviceRecovery = ['degraded', 'stopped'].includes(status.phase)
-      if ((status.phase === 'not-installed' || setupRecovery || serviceRecovery) && status.gpuName?.includes('5090')) {
-        freshWorkspaceRequested = status.phase === 'not-installed' || setupRecovery
-        await runAction('setup_stack')
-      }
+    if (status.workspaceReady && status.inferenceReady) {
+      setupRecoveryAttempts = 0
+      if (setupRecoveryTimer) clearTimeout(setupRecoveryTimer)
+      setupRecoveryTimer = null
+    } else {
+      scheduleAutomaticRecovery(status)
     }
   } catch (error) {
     elements.phaseMessage.textContent = String(error)
@@ -439,6 +467,7 @@ elements.primary.addEventListener('click', async () => {
     return
   }
   freshWorkspaceRequested = true
+  setupRecoveryAttempts = 0
   await runAction('setup_stack')
 })
 
