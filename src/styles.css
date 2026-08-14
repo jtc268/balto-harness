@@ -94,6 +94,7 @@ main { width: min(1120px, calc(100% - 84px)); margin: 0 auto; padding: 70px 0 80
 .eyebrow { color: #a7adb5; font-size: 11px; font-weight: 720; letter-spacing: 1.55px; text-transform: uppercase; display: flex; align-items: center; gap: 9px; }
 .eyebrow span { width: 17px; height: 2px; border-radius: 2px; background: var(--orange); box-shadow: 0 0 12px rgba(255, 107, 53, 0.55); }
 h1 { font-size: clamp(54px, 6.3vw, 78px); line-height: 0.98; letter-spacing: -4.4px; margin: 19px 0 23px; font-weight: 700; }
+h1 span { color: var(--green); }
 .hero-copy { max-width: 650px; margin: 0; color: #a9b0b8; font-size: 18px; line-height: 1.62; letter-spacing: -0.2px; }
 .hero-actions { margin-top: 34px; display: flex; align-items: center; gap: 22px; }
 .primary-button {
@@ -117,28 +118,7 @@ h1 { font-size: clamp(54px, 6.3vw, 78px); line-height: 0.98; letter-spacing: -4.
 .text-button { border: 0; background: transparent; color: #a9b0b8; padding: 8px 0; cursor: pointer; font-size: 13px; }
 .text-button:hover { color: var(--text); }
 
-.metrics { display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 12px; margin-top: 78px; }
-.metric-card {
-  min-height: 178px;
-  padding: 21px 22px 18px;
-  border: 1px solid var(--line);
-  border-radius: 17px;
-  background: linear-gradient(145deg, rgba(29, 33, 39, 0.9), rgba(18, 21, 25, 0.9));
-  position: relative;
-  overflow: hidden;
-}
-.metric-card::before { content: ""; position: absolute; inset: 0; background: linear-gradient(120deg, rgba(255,255,255,.035), transparent 35%); pointer-events: none; }
-.card-label { color: #7f8790; font-size: 9px; font-weight: 790; letter-spacing: 1.45px; }
-.metric-value, .speed-value { margin-top: 18px; font-size: 42px; line-height: 1; font-weight: 680; letter-spacing: -2.4px; font-variant-numeric: tabular-nums; }
-.metric-value small, .speed-value small { font-size: 10px; letter-spacing: 1.2px; color: #a2a9b1; margin-left: 4px; }
-.speed-value span { color: var(--green); text-shadow: 0 0 24px rgba(84, 223, 155, 0.18); }
-.metric-card p { position: absolute; bottom: 16px; left: 22px; right: 22px; margin: 0; color: #7f8790; font-size: 11px; line-height: 1.45; }
-.sparkline { position: absolute; width: 47%; height: 76px; right: 8px; top: 44px; opacity: 0.75; }
-.sparkline svg { width: 100%; height: 100%; overflow: visible; }
-.spark-fill { fill: url(#none); fill: rgba(84, 223, 155, 0.035); }
-.spark-stroke { fill: none; stroke: var(--green); stroke-width: 2; vector-effect: non-scaling-stroke; }
-
-.system-panel { margin-top: 68px; border-top: 1px solid var(--line); padding-top: 36px; }
+.system-panel { margin-top: 72px; border-top: 1px solid var(--line); padding-top: 36px; }
 .panel-heading { display: flex; justify-content: space-between; align-items: center; }
 h2 { margin: 10px 0 0; font-size: 30px; letter-spacing: -1.4px; font-weight: 680; }
 .progress-ring { width: 62px; height: 62px; border-radius: 50%; background: conic-gradient(var(--orange) calc(var(--progress) * 1%), rgba(255,255,255,.07) 0); display: grid; place-items: center; position: relative; }
@@ -197,6 +177,4 @@ dialog::backdrop { background: rgba(0,0,0,.62); backdrop-filter: blur(7px); }
 @media (max-width: 900px) {
   main { width: calc(100% - 48px); }
   .topbar { padding: 0 24px; }
-  .metrics { grid-template-columns: 1fr 1fr; }
-  .speed-card { grid-column: 1 / -1; }
 }
