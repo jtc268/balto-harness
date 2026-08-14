@@ -31,6 +31,8 @@ struct BaltoStatus {
     remote_url: Option<String>,
     inference_ready: bool,
     workspace_ready: bool,
+    #[serde(default)]
+    competing_models: Vec<String>,
     warning: Option<String>,
     updated_at: Option<String>,
 }
@@ -133,6 +135,11 @@ fn setup_stack(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn take_over_gpu(app: AppHandle) -> Result<(), String> {
+    spawn_action(&app, "takeover")
+}
+
+#[tauri::command]
 fn start_stack(app: AppHandle) -> Result<(), String> {
     spawn_action(&app, "start")
 }
@@ -179,6 +186,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_status,
             setup_stack,
+            take_over_gpu,
             start_stack,
             stop_stack,
             enable_remote,

@@ -61,6 +61,7 @@ function render(status) {
   const progress = Number(status.progress || 0)
   const ready = Boolean(status.workspaceReady && status.inferenceReady)
   const failed = status.phase === 'failed'
+  const competingModel = Array.isArray(status.competingModels) && status.competingModels.length > 0
 
   elements.progress.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
   elements.progressValue.textContent = `${progress}%`
@@ -72,6 +73,10 @@ function render(status) {
     elements.status.querySelector('span').textContent = 'Local stack ready'
     elements.phaseTitle.textContent = 'Balto is ready to work'
     elements.primaryLabel.textContent = 'Open Balto workspace'
+  } else if (competingModel) {
+    elements.status.querySelector('span').textContent = 'GPU ready for Balto'
+    elements.phaseTitle.textContent = 'Another model is running'
+    elements.primaryLabel.textContent = 'Close it and start Balto'
   } else if (failed) {
     elements.status.querySelector('span').textContent = 'Setup needs attention'
     elements.phaseTitle.textContent = 'Setup stopped'
@@ -171,6 +176,10 @@ async function runAction(command) {
 elements.primary.addEventListener('click', async () => {
   if (currentStatus?.workspaceReady) {
     await runAction('open_workspace')
+    return
+  }
+  if (Array.isArray(currentStatus?.competingModels) && currentStatus.competingModels.length > 0) {
+    await runAction('take_over_gpu')
     return
   }
   await runAction('setup_stack')

@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('status', 'setup', 'start', 'stop', 'remote-on', 'remote-off')]
+  [ValidateSet('status', 'setup', 'takeover', 'start', 'stop', 'remote-on', 'remote-off')]
   [string]$Action,
   [Parameter(Mandatory = $true)]
   [string]$BaltoData,
@@ -53,6 +53,7 @@ function New-DefaultState {
     remoteUrl = $null
     inferenceReady = $false
     workspaceReady = $false
+    competingModels = @()
     warning = $null
     updatedAt = $null
   }
@@ -130,6 +131,13 @@ function Get-TailscaleInfo {
   return $result
 }
 
+function Get-CompetingModelContainers {
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+  @(& docker ps --format '{{.Names}}|{{.Image}}' 2>$null) | Where-Object {
+    $_ -and $_ -notmatch "^$containerName\|" -and $_ -match '(sglang|vllm|ollama|qwen|llama)'
+  } | ForEach-Object { ($_ -split '\|')[0] }
+}
+
 function Test-RemoteEnabled([string]$DnsName) {
   if (-not $DnsName) { return $false }
   try {
@@ -174,6 +182,7 @@ function Refresh-Status([switch]$PreservePhase) {
   }
   $inferenceReady = $baltoContainerRunning -and (Test-TcpPort 30000)
   $workspaceReady = (Test-BaltoProcess 'workspace.pid' 'dsh\lib\bin.js') -and (Test-TcpPort 3080)
+  $competingModels = @()
   $warning = $null
 
   if ($gpuName -and $gpuName -notmatch 'RTX 5090') {
@@ -185,15 +194,24 @@ function Refresh-Status([switch]$PreservePhase) {
 
   if ($dockerReady) {
     try {
-      $otherModels = @(& docker ps --format '{{.Names}}|{{.Image}}' 2>$null) | Where-Object {
-        $_ -and $_ -notmatch "^$containerName\|" -and $_ -match '(sglang|vllm|ollama|qwen|llama)'
-      }
-      if ($otherModels.Count -gt 0) {
-        $names = ($otherModels | ForEach-Object { ($_ -split '\|')[0] }) -join ', '
-        $warning = "Another local model is already using the GPU. Close it before Balto starts. Technical name: $names."
+      $competingModels = @(Get-CompetingModelContainers)
+      if ($competingModels.Count -gt 0) {
+        $names = $competingModels -join ', '
+        $warning = "Another local model is using the GPU. Balto can close it safely and take over. Technical name: $names."
       }
     }
     catch { Write-Log "Container guard check failed: $($_.Exception.Message)" }
+  }
+
+  if ($competingModels.Count -eq 0 -and $gpuUsed -gt 4096 -and -not $inferenceReady -and (Get-Command lms -ErrorAction SilentlyContinue)) {
+    try {
+      $loadedLmStudioModels = @((& lms ps --json 2>$null | Out-String) | ConvertFrom-Json)
+      if ($loadedLmStudioModels.Count -gt 0) {
+        $competingModels = @('LM Studio')
+        $warning = 'LM Studio has a model loaded on the GPU. Balto can unload it safely and take over.'
+      }
+    }
+    catch { Write-Log "LM Studio model check failed: $($_.Exception.Message)" }
   }
 
   $state.gpuName = $gpuName
@@ -208,6 +226,7 @@ function Refresh-Status([switch]$PreservePhase) {
   $state.remoteUrl = if ($remoteEnabled) { "https://$($tailscale.dnsName):3080" } else { $null }
   $state.inferenceReady = $inferenceReady
   $state.workspaceReady = $workspaceReady
+  $state.competingModels = $competingModels
   $state.warning = $warning
 
   if (-not $PreservePhase) {
@@ -481,6 +500,40 @@ function Disable-Remote {
   Refresh-Status | Out-Null
 }
 
+function Stop-CompetingModels {
+  $models = @(Get-CompetingModelContainers)
+  foreach ($name in $models) {
+    Write-Log "Stopping competing model container: $name"
+    & docker stop $name 2>&1 | ForEach-Object { Write-Log "docker: $_" }
+  }
+  if (Get-Command lms -ErrorAction SilentlyContinue) {
+    try { & lms unload --all 2>&1 | ForEach-Object { Write-Log "lms: $_" } }
+    catch { Write-Log "LM Studio unload failed: $($_.Exception.Message)" }
+  }
+  for ($attempt = 0; $attempt -lt 45; $attempt++) {
+    $used = 0
+    try { $used = [uint64](& nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>$null | Select-Object -First 1) } catch {}
+    if ($used -lt 4096) { return }
+    Start-Sleep -Seconds 1
+  }
+}
+
+function Install-Balto {
+  Enable-SetupResume
+  Update-State @{ phase = 'installing'; progress = 10; message = 'Checking this RTX 5090 system.'; warning = $null }
+  Assert-Compatible
+  Ensure-Wsl
+  Ensure-Docker
+  Ensure-NodeRuntime
+  Ensure-WorkspaceRuntime
+  Ensure-Container
+  Wait-ForInference
+  Start-LocalServices
+  Update-State @{ phase = 'ready'; progress = 100; message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'; inferenceReady = $true; workspaceReady = $true }
+  Disable-SetupResume
+  Refresh-Status | Out-Null
+}
+
 try {
   Write-Log "Action started: $Action"
   switch ($Action) {
@@ -488,19 +541,11 @@ try {
       Refresh-Status | Out-Null
     }
     'setup' {
-      Enable-SetupResume
-      Update-State @{ phase = 'installing'; progress = 10; message = 'Checking this RTX 5090 system.'; warning = $null }
-      Assert-Compatible
-      Ensure-Wsl
-      Ensure-Docker
-      Ensure-NodeRuntime
-      Ensure-WorkspaceRuntime
-      Ensure-Container
-      Wait-ForInference
-      Start-LocalServices
-      Update-State @{ phase = 'ready'; progress = 100; message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'; inferenceReady = $true; workspaceReady = $true }
-      Disable-SetupResume
-      Refresh-Status | Out-Null
+      Install-Balto
+    }
+    'takeover' {
+      Stop-CompetingModels
+      Install-Balto
     }
     'start' {
       Assert-Compatible

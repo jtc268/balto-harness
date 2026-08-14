@@ -62,4 +62,8 @@ test('first launch sets itself up and opens the familiar workspace', async () =>
   assert.match(setup, /wsl\.exe --version/)
   assert.match(setup, /--no-distribution/)
   assert.match(setup, /--user', '--quiet', '--accept-license'/)
+  assert.match(setup, /'takeover'/)
+  assert.match(setup, /docker stop \$name/)
+  assert.match(setup, /lms unload --all/)
+  assert.match(app, /runAction\('take_over_gpu'\)/)
 })
