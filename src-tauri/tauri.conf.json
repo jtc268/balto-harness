@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Balto Harness",
+  "productName": "Balto Speedrunner",
   "version": "0.1.0",
-  "identifier": "com.adore.balto-harness",
+  "identifier": "com.adore.balto-speedrunner",
   "build": {
     "frontendDist": "../src"
   },
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Balto Harness",
+        "title": "Balto Speedrunner",
         "width": 1180,
         "height": 760,
         "minWidth": 960,
@@ -52,7 +52,7 @@
       "dialog": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU1RThFQjM4RjA2RUNDODgKUldTSXpHN3dPT3ZvVlVPeWR6aTREMnFiY2pCNWxmR0tvTkVrY2JsTThCUExibWNBcXFQVjRreTUK",
       "endpoints": [
-        "https://github.com/jtc268/balto-harness/releases/latest/download/latest.json"
+        "https://github.com/jtc268/balto-speedrunner/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

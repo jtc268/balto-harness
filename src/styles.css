@@ -74,7 +74,7 @@ button { color: inherit; }
 }
 .status-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--yellow); box-shadow: 0 0 12px rgba(255, 204, 102, 0.42); }
 .status-pill.ready i { background: var(--green); box-shadow: 0 0 12px rgba(84, 223, 155, 0.42); }
-.status-pill.error i { background: #ff6161; }
+.status-pill.error i { background: var(--orange); box-shadow: 0 0 12px rgba(255, 107, 53, 0.42); }
 
 .icon-button {
   width: 36px;
@@ -84,6 +84,7 @@ button { color: inherit; }
   border-radius: 10px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.025);
+  padding: 0;
   cursor: pointer;
 }
 .icon-button:hover { background: rgba(255, 255, 255, 0.065); }
@@ -129,7 +130,7 @@ h2 { margin: 10px 0 0; font-size: 30px; letter-spacing: -1.4px; font-weight: 680
 .check-item { min-height: 72px; border: 1px solid var(--line); border-radius: 13px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; background: rgba(255,255,255,.018); }
 .check-item > i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #626a73; flex: none; }
 .check-item.good > i { background: var(--green); border-color: var(--green); box-shadow: 0 0 13px rgba(84,223,155,.38); }
-.check-item.bad > i { background: #ff6161; border-color: #ff6161; }
+.check-item.bad > i { background: rgba(255, 107, 53, 0.2); border-color: var(--orange); box-shadow: 0 0 12px rgba(255, 107, 53, 0.22); }
 .check-item div { display: flex; flex-direction: column; gap: 4px; }
 .check-item strong { font-size: 13px; font-weight: 670; }
 .check-item span { color: #7f8790; font-size: 11px; }
@@ -157,7 +158,8 @@ dialog::backdrop { background: rgba(0,0,0,.62); backdrop-filter: blur(7px); }
 .settings-head { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .settings-head span { font-size: 9px; color: var(--orange); letter-spacing: 1.5px; font-weight: 780; }
 .settings-head h2 { margin-top: 5px; font-size: 23px; }
-.settings-head .icon-button { font-size: 22px; line-height: 1; }
+.settings-head .icon-button { flex: none; }
+.settings-head .icon-button svg { width: 16px; height: 16px; }
 .setting-row { padding: 17px 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 15px; }
 .setting-row > div { display: flex; flex-direction: column; gap: 4px; }
 .setting-row strong { font-size: 13px; }

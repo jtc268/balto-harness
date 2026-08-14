@@ -23,7 +23,7 @@ foreach ($name in $required) {
   -e $env:AZURE_ARTIFACT_SIGNING_ENDPOINT `
   -a $env:AZURE_ARTIFACT_SIGNING_ACCOUNT `
   -c $env:AZURE_ARTIFACT_SIGNING_PROFILE `
-  -d 'Balto Harness' `
+  -d 'Balto Speedrunner' `
   $File
 
 if ($LASTEXITCODE -ne 0) { throw "Windows signing failed for $File" }

@@ -1,6 +1,6 @@
 # Third-party notices
 
-Balto Harness is developed by Adore LLC and is distributed under the MIT License.
+Balto Speedrunner is developed by Adore LLC and is distributed under the MIT License.
 
 The agent interface and runtime integrate software from DeepSeek AI's DeepSeek Harness project. That software is distributed under the MIT License with copyright held by DeepSeek. Its original license is retained in installed runtime packages and reproduced below.
 
@@ -28,6 +28,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-Inference is powered by SGLang. Model weights are downloaded from RadixArk and Qwen repositories on Hugging Face and remain subject to their own licenses. Optional private remote access is powered by Tailscale. Docker Desktop, NVIDIA drivers, CUDA components, WebView2, Tailscale, SGLang, and model weights are not distributed under Balto Harness's MIT License.
+Inference is powered by SGLang. Model weights are downloaded from RadixArk and Qwen repositories on Hugging Face and remain subject to their own licenses. Optional private remote access is powered by Tailscale. Docker Desktop, NVIDIA drivers, CUDA components, WebView2, Tailscale, SGLang, and model weights are not distributed under Balto Speedrunner's MIT License.
 
-Balto Harness is not affiliated with or endorsed by DeepSeek, Qwen, Alibaba, SGLang, LMSYS, NVIDIA, Docker, Tailscale, Microsoft, or OpenAI.
+Balto Speedrunner is not affiliated with or endorsed by DeepSeek, Qwen, Alibaba, SGLang, LMSYS, NVIDIA, Docker, Tailscale, Microsoft, or OpenAI.

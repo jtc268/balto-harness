@@ -2,7 +2,7 @@
   <img src="src/balto-mark.svg" width="88" alt="Balto dog mark" />
 </p>
 
-# Balto Harness
+# Balto Speedrunner
 
 Qwen 3.8 27B at 2x the speed on one RTX 5090. Code at 150 tok/s. Chat at up to 300 tok/s.
 
@@ -86,10 +86,10 @@ The release workflow requires an Azure Artifact Signing account and certificate 
 
 ## License and credits
 
-Balto Harness is copyright 2026 Adore LLC and distributed under the MIT License.
+Balto Speedrunner is copyright 2026 Adore LLC and distributed under the MIT License.
 
 The coding agent interface integrates MIT-licensed software from DeepSeek AI. Inference is powered by SGLang. Qwen model weights remain under their own license. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the full notices.
 
-Balto Harness is not affiliated with or endorsed by DeepSeek, Qwen, Alibaba, SGLang, LMSYS, NVIDIA, Docker, Tailscale, Microsoft, or OpenAI.
+Balto Speedrunner is not affiliated with or endorsed by DeepSeek, Qwen, Alibaba, SGLang, LMSYS, NVIDIA, Docker, Tailscale, Microsoft, or OpenAI.
 
 If Balto saves you setup time, [buy me a coffee](https://buymeacoffee.com/refresh1).

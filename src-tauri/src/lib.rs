@@ -186,5 +186,5 @@ pub fn run() {
             open_workspace
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Balto Harness");
+        .expect("error while running Balto Speedrunner");
 }

@@ -15,14 +15,14 @@ await copyFile(join(resources, 'assets', 'balto-mark.svg'), join(dist, 'favicon.
 
 const indexPath = join(dist, 'index.html')
 let index = await readFile(indexPath, 'utf8')
-index = index.replaceAll('DeepSeek Harness', 'Balto Harness')
+index = index.replaceAll('DeepSeek Harness', 'Balto Speedrunner')
 if (!index.includes('/assets/balto-ui.js')) index = index.replace('</body>', `${scriptTag}\n  </body>`)
 await writeFile(indexPath, index)
 
 const manifestPath = join(dist, 'manifest.webmanifest')
 try {
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-  manifest.name = 'Balto Harness'
+  manifest.name = 'Balto Speedrunner'
   manifest.short_name = 'Balto'
   manifest.description = 'Fast local coding agent for RTX 5090'
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -40,8 +40,8 @@ async function patchUserFacingBundles(directory) {
     if (!entry.name.endsWith('.js')) continue
     const original = await readFile(path, 'utf8')
     const patched = original
-      .replaceAll('DeepSeek Harness', 'Balto Harness')
-      .replaceAll('DeepSeek-Harness', 'Balto Harness')
+      .replaceAll('DeepSeek Harness', 'Balto Speedrunner')
+      .replaceAll('DeepSeek-Harness', 'Balto Speedrunner')
     if (patched !== original) await writeFile(path, patched)
   }
 }

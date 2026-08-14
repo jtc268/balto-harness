@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0d0f12" />
-    <title>Balto Harness</title>
+    <title>Balto Speedrunner</title>
     <link rel="icon" href="/balto-mark.svg" />
     <link rel="stylesheet" href="/styles.css" />
     <script defer src="/app.js"></script>
@@ -12,10 +12,10 @@
   <body>
     <div class="noise" aria-hidden="true"></div>
     <header class="topbar">
-      <a class="brand" href="#" aria-label="Balto Harness home">
+      <a class="brand" href="#" aria-label="Balto Speedrunner home">
         <img src="/balto-mark.svg" alt="" />
         <span>Balto</span>
-        <small>HARNESS</small>
+        <small>SPEEDRUNNER</small>
       </a>
       <div class="topbar-actions">
         <span class="status-pill" id="top-status"><i></i><span>Checking tower</span></span>
@@ -81,11 +81,11 @@
     <dialog id="settings-dialog">
       <form method="dialog" class="settings-sheet">
         <div class="settings-head">
-          <div><span>SETTINGS</span><h2>Balto Harness</h2></div>
-          <button class="icon-button" value="cancel" aria-label="Close settings" type="submit">×</button>
+          <div><span>SETTINGS</span><h2>Balto Speedrunner</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Close settings" type="submit"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
         </div>
         <div class="setting-row">
-          <div><strong>Model configuration</strong><span>Qwen 3.8 27B NVFP4, DSpark, 80K context, effort off</span></div>
+          <div><strong>Model configuration</strong><span>Qwen 3.8 27B NVFP4, DSpark, 80K context</span></div>
           <span class="tag">PINNED</span>
         </div>
         <div class="setting-row">
@@ -99,13 +99,13 @@
         <button class="coffee-button" id="coffee-button" type="button">
           <span>☕</span><div><strong>Buy me a coffee</strong><small>Support fast local AI for more GPUs</small></div>
         </button>
-        <p class="legal">Balto Harness © 2026 Adore LLC. MIT licensed. Agent engine includes software from DeepSeek under MIT. Inference powered by SGLang. Model weights use their own licenses.</p>
+        <p class="legal">Balto Speedrunner © 2026 Adore LLC. MIT licensed. Agent engine includes software from DeepSeek under MIT. Inference powered by SGLang. Model weights use their own licenses.</p>
       </form>
     </dialog>
 
     <dialog id="log-dialog">
       <div class="log-sheet">
-        <div class="settings-head"><div><span>SETUP LOG</span><h2>What Balto is doing</h2></div><button class="icon-button" id="close-log" aria-label="Close log" type="button">×</button></div>
+        <div class="settings-head"><div><span>SETUP LOG</span><h2>What Balto is doing</h2></div><button class="icon-button" id="close-log" aria-label="Close log" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
         <pre id="log-output">Waiting for setup to begin.</pre>
       </div>
     </dialog>

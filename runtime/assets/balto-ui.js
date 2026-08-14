@@ -4,7 +4,7 @@
     ? 'http://127.0.0.1:30100/speed'
     : `https://${location.hostname}:30100/speed`
 
-  document.title = 'Balto Harness'
+  document.title = 'Balto Speedrunner'
 
   const style = document.createElement('style')
   style.textContent = `
@@ -74,8 +74,8 @@
   setInterval(poll, 300)
 
   const replacements = new Map([
-    ['DeepSeek Harness', 'Balto Harness'],
-    ['DeepSeek-Harness', 'Balto Harness'],
+    ['DeepSeek Harness', 'Balto Speedrunner'],
+    ['DeepSeek-Harness', 'Balto Speedrunner'],
   ])
   function replaceText(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)

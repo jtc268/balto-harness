@@ -33,7 +33,7 @@ test('release config uses a signed updater and NSIS', async () => {
   assert.deepEqual(config.bundle.targets, ['nsis'])
   assert.equal(config.bundle.createUpdaterArtifacts, true)
   assert.match(config.plugins.updater.pubkey, /^dW50cnVzdGVk/)
-  assert.match(config.plugins.updater.endpoints[0], /github\.com\/jtc268\/balto-harness/)
+  assert.match(config.plugins.updater.endpoints[0], /github\.com\/jtc268\/balto-speedrunner/)
 })
 
 test('product copy contains no em dash characters', async () => {

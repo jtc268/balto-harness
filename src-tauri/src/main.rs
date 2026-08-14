@@ -1,3 +1,3 @@
 fn main() {
-    balto_harness_lib::run();
+    balto_speedrunner_lib::run();
 }
