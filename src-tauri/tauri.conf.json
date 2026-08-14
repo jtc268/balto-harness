@@ -40,6 +40,7 @@
     },
     "windows": {
       "nsis": {
+        "template": "nsis/one-click.nsi",
         "installMode": "currentUser",
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",

@@ -8,6 +8,7 @@ Add-Type -AssemblyName System.Drawing
 $iconPath = Join-Path $ProjectRoot 'src-tauri\icons\icon.png'
 $outputRoot = Join-Path $ProjectRoot 'src-tauri\icons'
 $icon = [System.Drawing.Image]::FromFile($iconPath)
+$assetScale = 3
 
 function New-Canvas([int]$Width, [int]$Height) {
   $bitmap = [System.Drawing.Bitmap]::new($Width, $Height, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
@@ -18,9 +19,10 @@ function New-Canvas([int]$Width, [int]$Height) {
   return @($bitmap, $graphics)
 }
 
-$sidebar = New-Canvas 164 314
+$sidebar = New-Canvas (164 * $assetScale) (314 * $assetScale)
 $sidebarBitmap = $sidebar[0]
 $sidebarGraphics = $sidebar[1]
+$sidebarGraphics.ScaleTransform($assetScale, $assetScale)
 $sidebarBackground = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
   [System.Drawing.Rectangle]::new(0, 0, 164, 314),
   [System.Drawing.ColorTranslator]::FromHtml('#171b20'),
@@ -42,9 +44,10 @@ $sidebarBackground.Dispose()
 $sidebarGraphics.Dispose()
 $sidebarBitmap.Dispose()
 
-$header = New-Canvas 150 57
+$header = New-Canvas (150 * $assetScale) (57 * $assetScale)
 $headerBitmap = $header[0]
 $headerGraphics = $header[1]
+$headerGraphics.ScaleTransform($assetScale, $assetScale)
 $headerGraphics.Clear([System.Drawing.Color]::White)
 $headerGraphics.DrawImage($icon, 91, 6, 44, 44)
 $headerGraphics.DrawString('BALTO', [System.Drawing.Font]::new('Segoe UI Semibold', 13), [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#15181d')), 9, 10)

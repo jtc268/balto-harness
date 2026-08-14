@@ -35,6 +35,12 @@ test('release config uses a signed updater and NSIS', async () => {
   assert.match(config.plugins.updater.pubkey, /^dW50cnVzdGVk/)
   assert.match(config.plugins.updater.endpoints[0], /github\.com\/jtc268\/balto-speedrunner/)
   assert.equal(config.plugins.updater.dialog, false)
+  assert.equal(config.bundle.windows.nsis.installMode, 'currentUser')
+  assert.equal(config.bundle.windows.nsis.template, 'nsis/one-click.nsi')
+  const installer = await read('src-tauri/nsis/one-click.nsi')
+  assert.match(installer, /Balto is a zero-click per-user install\./)
+  assert.match(installer, /StrCpy \$PassiveMode 1/)
+  assert.match(installer, /ExecShell "open" "\$INSTDIR\\\$\{MAINBINARYNAME\}\.exe"/)
   const app = await read('src/app.js')
   assert.match(app, /check_for_updates/)
   assert.match(app, /install_update/)
@@ -50,6 +56,7 @@ test('product copy contains no em dash characters', async () => {
     'runtime/balto.ps1',
     'runtime/gateway.mjs',
     'runtime/assets/balto-ui.js',
+    'src-tauri/nsis/one-click.nsi',
   ]
   for (const path of paths) assert.doesNotMatch(await read(path), /—/, path)
 })
