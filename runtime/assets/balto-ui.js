@@ -25,7 +25,23 @@
     tryOpen()
   }
 
+  let testingNoticeDismissed = false
+  function dismissInternalTestingNotice() {
+    if (testingNoticeDismissed) return
+    const dialog = [...document.querySelectorAll('[role="dialog"], dialog')].find((candidate) =>
+      /Internal Testing Notice/i.test(candidate.textContent || ''),
+    )
+    if (!dialog) return
+    const continueButton = [...dialog.querySelectorAll('button')].find((candidate) =>
+      /^Continue$/i.test((candidate.textContent || '').trim()),
+    )
+    if (!continueButton) return
+    testingNoticeDismissed = true
+    continueButton.click()
+  }
+
   openFreshSession()
+  dismissInternalTestingNotice()
 
   const style = document.createElement('style')
   style.textContent = `
@@ -115,5 +131,6 @@
         else if (node.nodeType === Node.ELEMENT_NODE) replaceText(node)
       }
     }
+    dismissInternalTestingNotice()
   }).observe(document.body, { childList: true, subtree: true })
 })()

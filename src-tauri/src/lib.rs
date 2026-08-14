@@ -18,8 +18,14 @@ struct AppState {
 #[serde(rename_all = "camelCase")]
 struct BaltoStatus {
     phase: String,
+    stage: Option<String>,
     message: String,
     progress: u8,
+    started_at: Option<String>,
+    downloaded_gb: Option<f64>,
+    download_total_gb: Option<f64>,
+    download_rate_mbps: Option<f64>,
+    eta_seconds: Option<u64>,
     gpu_name: Option<String>,
     gpu_memory_mib: Option<u64>,
     gpu_memory_used_mib: Option<u64>,

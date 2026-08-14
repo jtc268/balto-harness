@@ -9,6 +9,21 @@ const elements = {
   phaseMessage: document.querySelector('#phase-message'),
   progress: document.querySelector('#progress-ring'),
   progressValue: document.querySelector('#progress-value'),
+  journey: document.querySelector('#setup-journey'),
+  journeyTitle: document.querySelector('#journey-title'),
+  journeyDetail: document.querySelector('#journey-detail'),
+  journeyStep: document.querySelector('#journey-step'),
+  journeyEta: document.querySelector('#journey-eta'),
+  journeyNote: document.querySelector('#journey-note'),
+  track: document.querySelector('#balto-track'),
+  downloadDetail: document.querySelector('#download-detail'),
+  elapsedTime: document.querySelector('#elapsed-time'),
+  setupSteps: [
+    document.querySelector('#setup-step-system'),
+    document.querySelector('#setup-step-runtime'),
+    document.querySelector('#setup-step-model'),
+    document.querySelector('#setup-step-launch'),
+  ],
   gpu: document.querySelector('#check-gpu'),
   docker: document.querySelector('#check-docker'),
   model: document.querySelector('#check-model'),
@@ -35,9 +50,11 @@ let freshWorkspaceRequested = false
 let availableUpdate = null
 let remoteChanging = false
 let updateInstalling = false
+let observedSetupStartedAt = null
 
-const previewStatus = {
+const idlePreviewStatus = {
   phase: 'not-installed',
+  stage: 'system-check',
   message: 'Ready to inspect this RTX 5090 system',
   progress: 4,
   gpuName: 'NVIDIA GeForce RTX 5090',
@@ -51,6 +68,92 @@ const previewStatus = {
   remoteEnabled: false,
   inferenceReady: false,
   workspaceReady: false,
+}
+
+const setupPreviewStatus = {
+  ...idlePreviewStatus,
+  phase: 'downloading-model',
+  stage: 'model',
+  message: 'Preparing Qwen 3.8 27B. 9.8 GB downloaded and verified. Interrupted downloads resume automatically',
+  progress: 64,
+  downloadedGb: 9.8,
+  downloadTotalGb: 24,
+  downloadRateMbps: 91.4,
+  etaSeconds: 155,
+  startedAt: new Date(Date.now() - 7 * 60 * 1000 - 24 * 1000).toISOString(),
+  inferenceReady: false,
+  workspaceReady: false,
+}
+
+const previewStatus = new URLSearchParams(location.search).get('preview') === 'setup'
+  ? setupPreviewStatus
+  : idlePreviewStatus
+
+const stageExperience = {
+  'system-check': {
+    step: 0,
+    title: 'Checking your RTX 5090',
+    detail: 'Balto is confirming GPU memory, free storage, and the Windows features needed for fast local AI',
+    eta: 'Usually under a minute',
+    activity: 'Checking compatibility and available storage',
+    note: 'No choices needed. Balto uses the fastest safe configuration for this GPU',
+  },
+  windows: {
+    step: 0,
+    title: 'Preparing Windows',
+    detail: 'Balto is enabling the Windows support required to run the NVIDIA inference stack locally',
+    eta: 'Usually 1 to 3 minutes',
+    activity: 'Preparing Windows inference support',
+    note: 'Windows may ask for approval once. If a restart is needed, Balto resumes automatically',
+  },
+  engine: {
+    step: 1,
+    title: 'Building the local engine',
+    detail: 'Balto is installing and starting the private runtime that connects Qwen directly to your RTX 5090',
+    eta: 'Usually 2 to 8 minutes',
+    activity: 'Installing the high-speed inference engine',
+    note: 'This is a one-time setup. Balto keeps the infrastructure out of your way after today',
+  },
+  'app-runtime': {
+    step: 1,
+    title: 'Preparing your coding workspace',
+    detail: 'Balto is creating Documents\\Balto and installing its private app runtime, local tools, and coding interface',
+    eta: 'Usually 1 to 3 minutes',
+    activity: 'Installing the Balto workspace and local tools',
+    note: 'Everything stays on this PC and launches automatically with Balto',
+  },
+  'inference-runtime': {
+    step: 1,
+    title: 'Tuning the inference stack',
+    detail: 'Balto is downloading the pinned SGLang runtime and the exact RTX 5090 configuration',
+    eta: 'Usually 2 to 10 minutes',
+    activity: 'Downloading cached runtime layers',
+    note: 'Completed layers are cached, so interrupted setup and future updates are much faster',
+  },
+  model: {
+    step: 2,
+    title: 'Qwen is coming aboard',
+    detail: 'Balto is downloading the optimized Qwen 3.8 27B model and its speed draft. This is the largest step',
+    eta: 'Usually 5 to 20 minutes',
+    activity: 'Connecting to the model host',
+    note: 'Keep Balto open. Every completed file is preserved and interrupted downloads resume automatically',
+  },
+  launch: {
+    step: 3,
+    title: 'Loading Qwen onto your GPU',
+    detail: 'Balto is loading the model into VRAM, starting the gateway, and opening your fresh coding workspace',
+    eta: 'Usually 1 to 3 minutes',
+    activity: 'Starting the model and coding interface',
+    note: 'The first GPU load takes a little longer. Future launches reuse everything already installed',
+  },
+  ready: {
+    step: 3,
+    title: 'Balto made it',
+    detail: 'Qwen is loaded on your RTX 5090 and the coding workspace is ready',
+    eta: 'Ready to code',
+    activity: 'Setup complete',
+    note: 'Opening a fresh Balto coding session now',
+  },
 }
 
 function setCheck(element, good, primary, detail) {
@@ -68,6 +171,78 @@ function withoutTrailingPeriod(value) {
   return String(value || '').replace(/[.]+$/, '')
 }
 
+function formatDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.round(Number(totalSeconds) || 0))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  if (minutes < 60) return remainder ? `${minutes}m ${remainder}s` : `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+}
+
+function inferredStage(status, progress, ready) {
+  if (ready) return 'ready'
+  if (status.stage && stageExperience[status.stage]) return status.stage
+  if (status.phase === 'downloading-model' || progress >= 47 && progress < 88) return 'model'
+  if (status.phase === 'starting' || progress >= 88) return 'launch'
+  if (status.phase === 'downloading-runtime' || progress >= 20) return 'app-runtime'
+  if (status.phase === 'installing' || progress >= 10) return 'engine'
+  return 'system-check'
+}
+
+function renderJourney(status, progress, ready, failed) {
+  const working = isWorking(status.phase)
+  const stage = inferredStage(status, progress, ready)
+  const experience = stageExperience[stage] || stageExperience['system-check']
+  const step = experience.step
+
+  document.body.classList.toggle('setup-active', working && !failed)
+  document.body.classList.toggle('setup-failed', failed)
+  document.body.classList.toggle('setup-complete', ready)
+  elements.track.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
+  elements.journeyTitle.textContent = failed ? 'Balto paused here' : experience.title
+  elements.journeyDetail.textContent = failed
+    ? 'Your completed work is safe. Balto will continue from this point when setup resumes'
+    : experience.detail
+  elements.journeyStep.textContent = ready ? '4 steps complete' : `Step ${step + 1} of 4`
+  elements.journeyNote.textContent = failed
+    ? 'Open the setup log for the exact issue, then choose Finish setup to continue'
+    : experience.note
+
+  if (working && !observedSetupStartedAt) observedSetupStartedAt = Date.now()
+  const startedAt = status.startedAt ? Date.parse(status.startedAt) : observedSetupStartedAt
+  const elapsedSeconds = startedAt && Number.isFinite(startedAt) ? (Date.now() - startedAt) / 1000 : 0
+  elements.elapsedTime.textContent = ready
+    ? `Completed in ${formatDuration(elapsedSeconds)}`
+    : `Elapsed ${formatDuration(elapsedSeconds)}`
+
+  const etaSeconds = Number(status.etaSeconds)
+  elements.journeyEta.textContent = ready
+    ? 'Ready to code'
+    : etaSeconds > 0
+      ? `About ${formatDuration(etaSeconds)} left`
+      : experience.eta
+
+  if (stage === 'model') {
+    const downloaded = Number(status.downloadedGb || 0)
+    const total = Number(status.downloadTotalGb || 24)
+    const rate = Number(status.downloadRateMbps || 0)
+    const pieces = [downloaded > 0 ? `${downloaded.toFixed(1)} GB of about ${total.toFixed(0)} GB` : experience.activity]
+    if (rate > 0) pieces.push(`${rate.toFixed(0)} MB/s`)
+    elements.downloadDetail.textContent = pieces.join('  •  ')
+  } else {
+    elements.downloadDetail.textContent = failed ? withoutTrailingPeriod(status.message) : experience.activity
+  }
+
+  elements.setupSteps.forEach((element, index) => {
+    const done = ready || index < step
+    element.classList.toggle('done', done)
+    element.classList.toggle('active', !ready && index === step)
+  })
+}
+
 function render(status) {
   currentStatus = status
   const progress = Number(status.progress || 0)
@@ -77,6 +252,7 @@ function render(status) {
   elements.progress.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
   elements.progressValue.textContent = `${progress}%`
   elements.phaseMessage.textContent = withoutTrailingPeriod(status.message || 'Waiting for Balto')
+  renderJourney(status, progress, ready, failed)
   elements.status.classList.toggle('ready', ready)
   elements.status.classList.toggle('error', failed)
 
@@ -121,7 +297,7 @@ function render(status) {
     elements.workspace,
     status.workspaceReady,
     'Coding workspace',
-    status.workspaceReady ? 'Ready for efficient tool calls' : 'Efficient local tool calls',
+    status.workspaceReady ? 'Documents\\Balto is ready' : 'Documents\\Balto with efficient local tool calls',
   )
 
   elements.warning.hidden = !status.warning

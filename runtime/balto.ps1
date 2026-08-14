@@ -30,6 +30,9 @@ $runtimeRoot = Join-Path $BaltoData 'runtime'
 $dshRoot = Join-Path $runtimeRoot 'dsh'
 $dshHome = Join-Path $BaltoData 'home'
 $pidRoot = Join-Path $BaltoData 'pids'
+$documentsRoot = [Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments)
+if (-not $documentsRoot) { $documentsRoot = Join-Path $env:USERPROFILE 'Documents' }
+$workspaceRoot = Join-Path $documentsRoot 'Balto'
 $nodeVersion = '22.22.1'
 $nodeFolder = "node-v$nodeVersion-win-x64"
 $nodeRoot = Join-Path $runtimeRoot $nodeFolder
@@ -41,7 +44,7 @@ $containerConfig = 'qwen38-nvfp4-dspark-80k-v1'
 $modelName = 'RadixArk/Qwen3.8-27B-NVFP4'
 $draftName = 'RadixArk/Qwen3.8-27B-DSpark'
 
-New-Item -ItemType Directory -Force -Path $BaltoData, $runtimeRoot, $dshHome, $pidRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $BaltoData, $runtimeRoot, $dshHome, $pidRoot, $workspaceRoot | Out-Null
 
 function Write-Log([string]$Message) {
   $stamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
@@ -77,8 +80,14 @@ function Invoke-LoggedNative {
 function New-DefaultState {
   @{
     phase = 'not-installed'
+    stage = 'system-check'
     message = 'Ready to inspect this PC.'
     progress = 0
+    startedAt = $null
+    downloadedGb = $null
+    downloadTotalGb = 24
+    downloadRateMbps = $null
+    etaSeconds = $null
     gpuName = $null
     gpuMemoryMib = $null
     gpuMemoryUsedMib = $null
@@ -245,15 +254,18 @@ function Refresh-Status([switch]$PreservePhase) {
   if (-not $PreservePhase) {
     if ($state.phase -eq 'ready' -and (-not $inferenceReady -or -not $workspaceReady)) {
       $state.phase = 'degraded'
+      $state.stage = 'launch'
       $state.message = 'A Balto service stopped. Start the stack to recover it.'
       $state.progress = 90
     }
     elseif ($inferenceReady -and $workspaceReady) {
       $state.phase = 'ready'
+      $state.stage = 'ready'
       $state.message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'
       $state.progress = 100
     }
     elseif ($state.phase -eq 'not-installed') {
+      $state.stage = 'system-check'
       $state.message = if ($gpuName) { 'System check complete. Balto is ready to install.' } else { 'No supported NVIDIA GPU was detected.' }
       $state.progress = 8
     }
@@ -289,7 +301,7 @@ function Ensure-Wsl {
   }
   if ($wslReady) { return }
 
-  Update-State @{ phase = 'installing'; progress = 11; message = 'Preparing Windows for high-speed local inference. Approve the Windows prompt if it appears.' }
+  Update-State @{ phase = 'installing'; stage = 'windows'; progress = 11; message = 'Preparing Windows for high-speed local inference. Approve the Windows prompt if it appears.' }
   Write-Log 'Installing WSL without a user distribution.'
   $wslInstall = Start-Process -FilePath 'wsl.exe' -ArgumentList @('--install', '--no-distribution', '--web-download') -Verb RunAs -Wait -PassThru
   if ($wslInstall.ExitCode -ne 0) { throw "Windows inference support exited with code $($wslInstall.ExitCode)." }
@@ -304,7 +316,7 @@ function Ensure-Wsl {
 
 function Ensure-Docker {
   if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Update-State @{ phase = 'installing'; progress = 13; message = 'Preparing the local inference engine.' }
+    Update-State @{ phase = 'installing'; stage = 'engine'; progress = 13; message = 'Preparing the local inference engine.' }
     Write-Log 'Installing Docker Desktop in official per-user mode.'
     $dockerInstaller = Join-Path $runtimeRoot 'Docker Desktop Installer.exe'
     $dockerInstallerUrl = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'
@@ -327,7 +339,7 @@ function Ensure-Docker {
   )
   $desktop = $desktopCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
   if ($desktop) {
-    Update-State @{ phase = 'installing'; progress = 18; message = 'Starting the local inference engine.' }
+    Update-State @{ phase = 'installing'; stage = 'engine'; progress = 18; message = 'Starting the local inference engine.' }
     Start-Process -FilePath $desktop -WindowStyle Hidden | Out-Null
   }
   for ($attempt = 0; $attempt -lt 120; $attempt++) {
@@ -339,7 +351,7 @@ function Ensure-Docker {
 
 function Ensure-NodeRuntime {
   if (Test-Path -LiteralPath $nodeExe) { return }
-  Update-State @{ phase = 'downloading-runtime'; progress = 22; message = "Downloading Balto's private Node.js runtime." }
+  Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 22; message = "Downloading Balto's private Node.js runtime." }
   $archive = Join-Path $runtimeRoot "node-v$nodeVersion-win-x64.zip"
   $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip"
   Write-Log "Downloading $url"
@@ -349,11 +361,54 @@ function Ensure-NodeRuntime {
   if (-not (Test-Path -LiteralPath $nodeExe)) { throw 'The private Node.js runtime did not install correctly.' }
 }
 
+function Ensure-DefaultWorkspace {
+  $storageRoot = Join-Path $dshHome 'storages'
+  $workspaceStatePath = Join-Path $storageRoot 'workspace.json'
+  $workspaceStateTempPath = Join-Path $storageRoot 'workspace.json.tmp'
+  $canonicalWorkspace = [System.IO.Path]::GetFullPath($workspaceRoot).TrimEnd('\')
+  New-Item -ItemType Directory -Force -Path $storageRoot, $canonicalWorkspace | Out-Null
+
+  if (Test-Path -LiteralPath $workspaceStatePath) {
+    $workspaceState = Get-Content -LiteralPath $workspaceStatePath -Raw | ConvertFrom-Json
+    if ($workspaceState.unit.name -ne 'workspace' -or $workspaceState.unit.version -ne 2) {
+      Write-Log 'The workspace registry uses a newer format. Balto left it unchanged.'
+      return
+    }
+    foreach ($entry in $workspaceState.tables.workspaces.PSObject.Properties) {
+      if ([string]::Equals([string]$entry.Value.path, $canonicalWorkspace, [System.StringComparison]::OrdinalIgnoreCase)) { return }
+    }
+  }
+  else {
+    $workspaceState = [pscustomobject]@{
+      unit = [pscustomobject]@{ name = 'workspace'; version = 2 }
+      global = [pscustomobject]@{ initialized = $true; workspaceIds = @(); archivedSessionIds = @() }
+      tables = [pscustomobject]@{ workspaces = [pscustomobject]@{} }
+    }
+  }
+
+  $workspaceId = [guid]::NewGuid().ToString()
+  $createdAt = (Get-Date).ToUniversalTime().ToString('o')
+  $record = [pscustomobject]@{
+    path = $canonicalWorkspace
+    title = 'Balto'
+    sessionIds = @()
+    createdAt = $createdAt
+    updatedAt = $createdAt
+  }
+  $workspaceState.tables.workspaces | Add-Member -NotePropertyName $workspaceId -NotePropertyValue $record
+  $workspaceState.global.initialized = $true
+  $workspaceState.global.workspaceIds = @($workspaceId) + @($workspaceState.global.workspaceIds)
+  $json = $workspaceState | ConvertTo-Json -Depth 10
+  [System.IO.File]::WriteAllText($workspaceStateTempPath, $json, [System.Text.UTF8Encoding]::new($false))
+  Move-Item -LiteralPath $workspaceStateTempPath -Destination $workspaceStatePath -Force
+  Write-Log "Created the default coding workspace at $canonicalWorkspace."
+}
+
 function Ensure-WorkspaceRuntime {
   $dshEntry = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'
   $yamlModule = Join-Path $dshRoot 'node_modules\js-yaml\dist\js-yaml.mjs'
   if (-not (Test-Path -LiteralPath $dshEntry) -or -not (Test-Path -LiteralPath $yamlModule)) {
-    Update-State @{ phase = 'downloading-runtime'; progress = 28; message = 'Installing the Balto coding workspace.' }
+    Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Installing the Balto coding workspace.' }
     Write-Log 'Installing the pinned agent interface and compatible YAML runtime.'
     Invoke-LoggedNative -FilePath $nodeExe -Arguments @($npmCli, 'install', '--prefix', $dshRoot, '@deepseek-ai/dsh@0.1.0-rc.6', 'js-yaml@4.2.0', '--omit=dev', '--no-audit', '--no-fund') -Prefix 'npm'
   }
@@ -361,6 +416,7 @@ function Ensure-WorkspaceRuntime {
   if (-not (Test-Path -LiteralPath $yamlModule)) { throw 'The Balto coding workspace YAML runtime did not install correctly.' }
   Invoke-LoggedNative -FilePath $nodeExe -Arguments @((Join-Path $Resources 'patch-dsh.mjs'), $dshRoot, $Resources) -Prefix 'brand'
   Copy-Item -LiteralPath (Join-Path $Resources 'templates\settings.yaml') -Destination (Join-Path $dshHome 'settings.yaml') -Force
+  Ensure-DefaultWorkspace
 }
 
 function Stop-BaltoProcess([string]$PidName, [string]$Needle) {
@@ -375,7 +431,7 @@ function Stop-BaltoProcess([string]$PidName, [string]$Needle) {
   Remove-Item -LiteralPath $pidPath -Force -ErrorAction SilentlyContinue
 }
 
-function Start-BaltoProcess([string]$PidName, [string]$FilePath, [string[]]$Arguments, [string]$Needle) {
+function Start-BaltoProcess([string]$PidName, [string]$FilePath, [string[]]$Arguments, [string]$Needle, [string]$WorkingDirectory = '') {
   $pidPath = Join-Path $pidRoot $PidName
   if (Test-Path -LiteralPath $pidPath) {
     try {
@@ -390,7 +446,16 @@ function Start-BaltoProcess([string]$PidName, [string]$FilePath, [string[]]$Argu
   $quotedArguments = $Arguments | ForEach-Object {
     if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ }
   }
-  $process = Start-Process -FilePath $FilePath -ArgumentList $quotedArguments -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+  $startParameters = @{
+    FilePath = $FilePath
+    ArgumentList = $quotedArguments
+    WindowStyle = 'Hidden'
+    PassThru = $true
+    RedirectStandardOutput = $stdout
+    RedirectStandardError = $stderr
+  }
+  if ($WorkingDirectory) { $startParameters.WorkingDirectory = $WorkingDirectory }
+  $process = Start-Process @startParameters
   [System.IO.File]::WriteAllText($pidPath, [string]$process.Id)
 }
 
@@ -423,11 +488,11 @@ function Ensure-Container {
     Invoke-LoggedNative -FilePath 'docker' -Arguments @('rm', '--force', $containerName) -Prefix 'docker'
   }
 
-  Update-State @{ phase = 'downloading-runtime'; progress = 34; message = 'Downloading the pinned SGLang runtime. Docker resumes interrupted layers.' }
+  Update-State @{ phase = 'downloading-runtime'; stage = 'inference-runtime'; progress = 34; message = 'Downloading the pinned SGLang runtime. Docker resumes interrupted layers.' }
   Invoke-LoggedNative -FilePath 'docker' -Arguments @('pull', $containerImage) -Prefix 'docker pull'
   Invoke-LoggedNative -FilePath 'docker' -Arguments @('volume', 'create', $cacheVolume) -Prefix 'docker volume'
 
-  Update-State @{ phase = 'downloading-model'; progress = 47; message = 'Downloading Qwen 3.8 27B NVFP4 and its DSpark draft. Partial downloads are preserved.' }
+  Update-State @{ phase = 'downloading-model'; stage = 'model'; progress = 47; message = 'Downloading Qwen 3.8 27B NVFP4 and its DSpark draft. Partial downloads are preserved.'; downloadedGb = 0; downloadTotalGb = 24; downloadRateMbps = $null; etaSeconds = $null }
   $dockerArgs = @(
     'run', '-d', '--name', $containerName,
     '--label', "com.adore.balto.config=$containerConfig",
@@ -470,16 +535,44 @@ function Ensure-Container {
 }
 
 function Wait-ForInference {
+  $lastDownloadedBytes = $null
+  $lastSampleTime = Get-Date
+  $expectedModelBytes = 24GB
   for ($attempt = 0; $attempt -lt 240; $attempt++) {
     if (Test-HttpReady 'http://127.0.0.1:30000/health') { return }
     if ($attempt % 3 -eq 0) {
       $downloadedBytes = 0
       try { $downloadedBytes = [uint64](& docker exec $containerName sh -lc 'du -sb /root/.cache/huggingface/hub 2>/dev/null | cut -f1' 2>$null) } catch {}
+      $sampleTime = Get-Date
       $downloadedGb = [math]::Round($downloadedBytes / 1GB, 1)
-      $modelProgress = [math]::Min(1, $downloadedBytes / 24GB)
+      $modelProgress = [math]::Min(1, $downloadedBytes / $expectedModelBytes)
       $progress = [math]::Min(84, 50 + [math]::Floor($modelProgress * 34))
       $detail = if ($downloadedGb -gt 0) { "$downloadedGb GB downloaded and verified." } else { 'Connecting to the model host.' }
-      Update-State @{ phase = 'downloading-model'; progress = $progress; message = "Preparing Qwen 3.8 27B. $detail Interrupted downloads resume automatically." }
+      $downloadRateMbps = $null
+      $etaSeconds = $null
+      if ($null -ne $lastDownloadedBytes -and $downloadedBytes -gt $lastDownloadedBytes) {
+        $sampleSeconds = ($sampleTime - $lastSampleTime).TotalSeconds
+        if ($sampleSeconds -gt 0) {
+          $bytesPerSecond = ($downloadedBytes - $lastDownloadedBytes) / $sampleSeconds
+          $downloadRateMbps = [math]::Round($bytesPerSecond / 1MB, 1)
+          $remainingBytes = [math]::Max(0, $expectedModelBytes - $downloadedBytes)
+          if ($bytesPerSecond -gt 0 -and $remainingBytes -gt 0) {
+            $etaSeconds = [uint64][math]::Min(21600, [math]::Ceiling($remainingBytes / $bytesPerSecond))
+          }
+        }
+      }
+      Update-State @{
+        phase = 'downloading-model'
+        stage = 'model'
+        progress = $progress
+        message = "Preparing Qwen 3.8 27B. $detail Interrupted downloads resume automatically."
+        downloadedGb = $downloadedGb
+        downloadTotalGb = 24
+        downloadRateMbps = $downloadRateMbps
+        etaSeconds = $etaSeconds
+      }
+      $lastDownloadedBytes = $downloadedBytes
+      $lastSampleTime = $sampleTime
     }
     $running = & docker inspect -f '{{.State.Running}}' $containerName 2>$null
     if ($running -ne 'true') {
@@ -492,7 +585,7 @@ function Wait-ForInference {
 }
 
 function Start-LocalServices {
-  Update-State @{ phase = 'starting'; progress = 88; message = 'Starting the Balto gateway and coding workspace.' }
+  Update-State @{ phase = 'starting'; stage = 'launch'; progress = 88; message = 'Starting the Balto gateway and coding workspace.'; etaSeconds = $null }
   $env:PATH = "$nodeRoot;$env:PATH"
   $env:DSH_HOME = $dshHome
   Start-BaltoProcess 'gateway.pid' $nodeExe @((Join-Path $Resources 'gateway.mjs')) 'gateway.mjs'
@@ -503,7 +596,7 @@ function Start-LocalServices {
   if ($tailscale.signedIn -and $tailscale.dnsName) {
     $arguments += @('--trusted-host', "$($tailscale.dnsName):3080")
   }
-  Start-BaltoProcess 'workspace.pid' $nodeExe $arguments 'dsh\lib\bin.js'
+  Start-BaltoProcess 'workspace.pid' $nodeExe $arguments 'dsh\lib\bin.js' $workspaceRoot
 
   for ($attempt = 0; $attempt -lt 60; $attempt++) {
     if ((Test-BaltoProcess 'gateway.pid' 'gateway.mjs') -and (Test-BaltoProcess 'workspace.pid' 'dsh\lib\bin.js') -and (Test-TcpPort 30100) -and (Test-TcpPort 3080)) { return }
@@ -539,7 +632,7 @@ function Disable-Remote {
 
 function Install-Balto {
   Enable-SetupResume
-  Update-State @{ phase = 'installing'; progress = 10; message = 'Checking this RTX 5090 system.'; warning = $null }
+  Update-State @{ phase = 'installing'; stage = 'system-check'; progress = 10; message = 'Checking this RTX 5090 system.'; warning = $null; startedAt = (Get-Date).ToUniversalTime().ToString('o'); downloadedGb = $null; downloadRateMbps = $null; etaSeconds = $null }
   Assert-Compatible
   Ensure-Wsl
   Ensure-Docker
@@ -548,7 +641,7 @@ function Install-Balto {
   Ensure-Container
   Wait-ForInference
   Start-LocalServices
-  Update-State @{ phase = 'ready'; progress = 100; message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'; inferenceReady = $true; workspaceReady = $true }
+  Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'; inferenceReady = $true; workspaceReady = $true; etaSeconds = 0 }
   Disable-SetupResume
   Refresh-Status | Out-Null
 }
@@ -570,17 +663,17 @@ try {
       Ensure-Container
       Wait-ForInference
       Start-LocalServices
-      Update-State @{ phase = 'ready'; progress = 100; message = 'Balto is ready.' }
+      Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Balto is ready.'; etaSeconds = 0 }
       Disable-SetupResume
       Refresh-Status | Out-Null
     }
     'stop' {
-      Update-State @{ phase = 'stopping'; progress = 95; message = 'Stopping Balto without removing model data.' }
+      Update-State @{ phase = 'stopping'; stage = 'launch'; progress = 95; message = 'Stopping Balto without removing model data.' }
       Disable-Remote
       Stop-BaltoProcess 'workspace.pid' 'dsh\lib\bin.js'
       Stop-BaltoProcess 'gateway.pid' 'gateway.mjs'
       if (Get-Command docker -ErrorAction SilentlyContinue) { Invoke-LoggedNative -FilePath 'docker' -Arguments @('stop', $containerName) -Prefix 'docker' -AllowFailure }
-      Update-State @{ phase = 'stopped'; progress = 0; message = 'Balto is stopped. Model files remain cached.'; inferenceReady = $false; workspaceReady = $false }
+      Update-State @{ phase = 'stopped'; stage = 'launch'; progress = 0; message = 'Balto is stopped. Model files remain cached.'; inferenceReady = $false; workspaceReady = $false }
     }
     'remote-on' { Enable-Remote }
     'remote-off' { Disable-Remote }
