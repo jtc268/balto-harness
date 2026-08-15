@@ -3,6 +3,10 @@
 - id: llm-deepseek
   disabled: true
 
+# Keep the MVP header focused. Session log exports are not exposed.
+- id: session-log-download
+  disabled: true
+
 # The web profile disables these coding-agent durability features upstream.
 # Balto enables them so long jobs checkpoint, compact, and keep moving.
 - id: compaction-basic

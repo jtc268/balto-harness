@@ -170,18 +170,6 @@
   `
   document.body.append(bar)
 
-  function positionSpeedBar() {
-    const exportButton = [...document.querySelectorAll('button')].find((candidate) =>
-      /^Session log\b/i.test((candidate.textContent || '').trim()),
-    )
-    const right = exportButton
-      ? Math.max(window.innerWidth - exportButton.getBoundingClientRect().left + 12, 18)
-      : 18
-    bar.style.right = `${right}px`
-  }
-  positionSpeedBar()
-  window.addEventListener('resize', positionSpeedBar)
-
   const value = bar.querySelector('.balto-value')
   let shown = 0
   let target = 0
@@ -213,6 +201,7 @@
     ['@deepseek-ai/dsh-system-prompt', 'Balto system prompt'],
   ])
   function replaceText(root) {
+    if (!(root instanceof Node)) return
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) {
       const node = walker.currentNode
@@ -232,6 +221,5 @@
     dismissInternalTestingNotice()
     brandVisibleWorkspace()
     simplifyEffortControls()
-    requestAnimationFrame(positionSpeedBar)
   }).observe(document.body, { childList: true, subtree: true })
 })()

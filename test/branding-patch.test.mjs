@@ -55,7 +55,7 @@ test('preview badge is removed from the Balto hero', async () => {
   assert.match(script, /\['@deepseek-ai\/dsh-system-prompt', 'Balto system prompt'\]/)
 })
 
-test('live meter is compact, animated, and positioned beside session export', async () => {
+test('live meter is compact and animated', async () => {
   const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
   assert.doesNotMatch(script, /class="balto-brand"/)
   assert.doesNotMatch(script, /class="balto-name">Balto/)
@@ -63,7 +63,5 @@ test('live meter is compact, animated, and positioned beside session export', as
   assert.match(script, /@keyframes balto-sprint/)
   assert.match(script, /@keyframes balto-trail/)
   assert.match(script, /prefers-reduced-motion: reduce/)
-  assert.match(script, /function positionSpeedBar\(\)/)
-  assert.match(script, /\^Session log\\b/)
-  assert.match(script, /getBoundingClientRect\(\)\.left \+ 12/)
+  assert.match(script, /if \(!\(root instanceof Node\)\) return/)
 })

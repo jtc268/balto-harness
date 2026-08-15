@@ -182,6 +182,7 @@ test('fresh installs boot only Balto Qwen while user-added models persist', asyn
   assert.match(settings, /displayName: Balto Qwen/)
   assert.match(settings, /name: Balto Qwen 3\.8 27B/)
   assert.match(profile, /id: llm-deepseek\s+disabled: true/)
+  assert.match(profile, /id: session-log-download\s+disabled: true/)
   assert.match(setup, /if \(-not \(Test-Path -LiteralPath \$settingsPath\)\)/)
   assert.doesNotMatch(setup, /settings\.yaml'\) -Destination \(Join-Path \$dshHome 'settings\.yaml'\) -Force/)
   assert.match(setup, /configure-settings\.mjs/)
