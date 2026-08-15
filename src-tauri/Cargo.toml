@@ -1,9 +1,9 @@
 [package]
 name = "balto-speedrunner"
-version = "0.1.9"
+version = "0.1.10"
 description = "One-click local coding agent for RTX 5090 systems"
 authors = ["Adore LLC"]
-license = "MIT"
+license = "LicenseRef-Proprietary"
 repository = "https://github.com/jtc268/balto-speedrunner"
 edition = "2024"
 
