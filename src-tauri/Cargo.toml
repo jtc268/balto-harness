@@ -1,6 +1,6 @@
 [package]
 name = "balto-speedrunner"
-version = "0.1.6"
+version = "0.1.7"
 description = "One-click local coding agent for RTX 5090 systems"
 authors = ["Adore LLC"]
 license = "MIT"
