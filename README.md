@@ -2,7 +2,7 @@
   <img src="src/balto-mark.svg" width="88" alt="Balto dog mark" />
 </p>
 
-# Balto Speedrunner for Qwen 3.8 27B on an RTX 5090
+# Balto Speedrunner for Qwen 3.8 27B on an RTX 5090 - Windows
 
 Qwen 3.8 27B at 2x the speed on one RTX 5090. Code at ~100-150 tok/s. Chat at up to 300 tok/s.
 
