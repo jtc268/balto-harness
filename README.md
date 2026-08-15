@@ -16,6 +16,14 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/jtc268/balto-speedrunner/releases/latest/download/Balto-Speedrunner-Windows-x64.exe">
+    <img src="docs/balto-download-windows.svg" width="680" alt="Download Balto for Windows" />
+  </a>
+</p>
+
+<p align="center"><sub>First launch downloads the inference engine and model. Keep at least 90 GB free.</sub></p>
+
+<p align="center">
   <a href="#what-the-installer-does"><strong>How it works</strong></a>
   &nbsp;&nbsp;•&nbsp;&nbsp;
   <a href="#measured-on-our-rtx-5090"><strong>Benchmarks</strong></a>
@@ -60,13 +68,12 @@ The onboarding screen shows the exact private URL and lets the owner turn remote
 The inference arguments live in [`runtime/balto.ps1`](runtime/balto.ps1). The important settings are:
 
 ```text
-context length        80000
-KV cache              fp8_e4m3
-attention backend     flashinfer
-max running requests  1
-speculation           DSpark, block size 7
-sampling              temperature 0.6, top_p 0.95, top_k 20
-reasoning effort       off by default
+model                  Qwen 3.8 27B NVFP4
+context length         80000
+attention backend      flashinfer
+max running requests   1
+speculation            DSpark, FP8 draft
+sampling               temperature 0.6, top_p 0.95, top_k 20
 ```
 
 Balto uses safe sampling defaults for coding. It does not force greedy temperature zero sampling, which can trap this model in repetitive reasoning loops.
@@ -101,11 +108,11 @@ Balto supports two different signatures:
 
 Every install shows its version in Settings. A green update arrow appears when GitHub publishes a newer signed release; one click verifies, installs, and relaunches it.
 
-The release workflow requires an Azure Artifact Signing account and certificate profile. It refuses to publish a release without those credentials. Local development builds remain unsigned.
+The release workflow uses Azure Artifact Signing when publisher credentials are configured. The in-app updater always verifies Tauri update signatures. Local development builds remain unsigned.
 
 ## License and credits
 
-Balto Speedrunner is copyright 2026 Adore LLC and distributed under the MIT License.
+Balto Speedrunner is proprietary software, copyright 2026 Adore LLC. All rights reserved.
 
 The coding agent interface integrates MIT-licensed software from DeepSeek AI. Inference is powered by SGLang. Qwen model weights remain under their own license. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the full notices.
 
