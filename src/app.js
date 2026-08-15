@@ -33,19 +33,13 @@ const elements = {
   settings: document.querySelector('#settings-dialog'),
   log: document.querySelector('#log-dialog'),
   logOutput: document.querySelector('#log-output'),
-  updateButton: document.querySelector('#update-button'),
-  updateRow: document.querySelector('#update-row'),
-  updateDetail: document.querySelector('#update-detail'),
-  updateTag: document.querySelector('#update-tag'),
 }
 
 let currentStatus = null
 let busy = false
 let workspaceOpened = false
 let freshWorkspaceRequested = false
-let availableUpdate = null
 let remoteChanging = false
-let updateInstalling = false
 let observedSetupStartedAt = null
 let setupRecoveryAttempts = 0
 let setupRecoveryTimer = null
@@ -450,52 +444,6 @@ async function runAction(command, payload = {}) {
   }
 }
 
-async function checkForUpdates() {
-  if (!invoke) return
-  try {
-    const update = await invoke('check_for_updates')
-    availableUpdate = update.availableVersion || null
-    elements.updateDetail.textContent = availableUpdate
-      ? `Balto Speedrunner ${availableUpdate} is ready`
-      : `Balto Speedrunner ${update.currentVersion}`
-    elements.updateTag.textContent = availableUpdate ? `v${availableUpdate}` : 'CURRENT'
-    elements.updateTag.classList.toggle('green', !availableUpdate)
-    elements.updateRow.classList.toggle('available', Boolean(availableUpdate))
-    elements.updateButton.hidden = !availableUpdate
-  } catch {
-    elements.updateDetail.textContent = 'Signed updates check automatically'
-    elements.updateTag.textContent = 'AUTO'
-  }
-}
-
-async function installAvailableUpdate() {
-  if (!availableUpdate || !invoke) {
-    await checkForUpdates()
-    return
-  }
-  if (updateInstalling) return
-  updateInstalling = true
-  elements.updateRow.disabled = true
-  elements.updateButton.disabled = true
-  elements.updateButton.setAttribute('aria-label', 'Installing Balto update')
-  elements.updateButton.title = 'Installing update'
-  elements.updateRow.classList.add('installing')
-  elements.updateTag.textContent = 'INSTALLING'
-  elements.updateDetail.textContent = `Verifying and installing ${availableUpdate}`
-  try {
-    await invoke('install_update')
-  } catch (error) {
-    elements.updateDetail.textContent = String(error)
-    elements.updateTag.textContent = 'RETRY'
-    elements.updateRow.disabled = false
-    elements.updateButton.disabled = false
-    elements.updateButton.setAttribute('aria-label', 'Retry Balto update')
-    elements.updateButton.title = 'Retry update'
-    elements.updateRow.classList.remove('installing')
-    updateInstalling = false
-  }
-}
-
 async function changeRemoteAccess(enabled) {
   if (!invoke || remoteChanging) return
   remoteChanging = true
@@ -539,8 +487,6 @@ elements.settings.addEventListener('click', (event) => {
   if (event.target === elements.settings) elements.settings.close()
 })
 document.querySelector('#settings-button').addEventListener('click', () => elements.settings.showModal())
-elements.updateButton.addEventListener('click', installAvailableUpdate)
-elements.updateRow.addEventListener('click', installAvailableUpdate)
 document.querySelector('#view-log').addEventListener('click', () => elements.log.showModal())
 document.querySelector('#close-log').addEventListener('click', () => elements.log.close())
 document.querySelector('#coffee-button').addEventListener('click', async () => {
@@ -555,5 +501,4 @@ elements.remoteUrl.addEventListener('click', async (event) => {
 })
 
 refresh()
-setTimeout(checkForUpdates, 1800)
 setInterval(refresh, 1800)

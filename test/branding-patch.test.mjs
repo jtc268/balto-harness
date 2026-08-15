@@ -130,6 +130,16 @@ test('live meter is compact and animated', async () => {
   assert.match(script, /bar\.dataset\.state = isLive \? 'live' : 'idle'/)
 })
 
+test('signed updates live beside the main interface speedometer', async () => {
+  const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
+  assert.match(script, /class="balto-update-button"/)
+  assert.match(script, /aria-label="Install Balto update"/)
+  assert.match(script, /await tauriInvoke\('check_for_updates'\)/)
+  assert.match(script, /await tauriInvoke\('install_update'\)/)
+  assert.match(script, /updateButton\.hidden = !availableUpdate/)
+  assert.match(script, /@keyframes balto-update/)
+})
+
 test('remote control settings only mount on the General tab', async () => {
   const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
   assert.match(script, /generalButton\?\.getAttribute\('aria-current'\) === 'true'/)

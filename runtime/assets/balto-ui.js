@@ -6,6 +6,7 @@
   const remoteEndpoint = LOCAL_HOSTS.has(location.hostname)
     ? 'http://127.0.0.1:30100/remote'
     : `https://${location.hostname}:30100/remote`
+  const tauriInvoke = window.__TAURI__?.core?.invoke
 
   document.title = 'Balto Speedrunner'
 
@@ -470,8 +471,16 @@
     #balto-live-bar .balto-value { color: var(--balto-speed); font: 650 26px/1 "Cascadia Code", Consolas, monospace; letter-spacing: -1.6px; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in srgb, var(--balto-speed) 18%, transparent); }
     #balto-live-bar .balto-unit { color: rgba(245,247,248,.58); font-size: 8px; font-weight: 800; letter-spacing: 1px; }
     #balto-live-bar[data-state="idle"] .balto-value { color: #707780; text-shadow: none; }
+    #balto-live-bar .balto-update-button { position: relative; width: 31px; height: 31px; flex: 0 0 31px; display: grid; place-items: center; margin-left: 3px; padding: 0; border: 1px solid rgba(84,223,155,.2); border-radius: 9px; color: #54df9b; background: rgba(84,223,155,.07); cursor: pointer; }
+    #balto-live-bar .balto-update-button[hidden] { display: none; }
+    #balto-live-bar .balto-update-button:hover { background: rgba(84,223,155,.14); }
+    #balto-live-bar .balto-update-button:disabled { cursor: wait; opacity: .72; }
+    #balto-live-bar .balto-update-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    #balto-live-bar .balto-update-button::after { content: ""; position: absolute; top: -3px; right: -3px; width: 7px; height: 7px; border: 2px solid #1c2025; border-radius: 50%; background: #ff6b35; box-shadow: 0 0 10px rgba(255,107,53,.5); }
+    #balto-live-bar .balto-update-button[data-installing="true"] svg { animation: balto-update 700ms ease-in-out infinite alternate; }
     @keyframes balto-sprint { 0%, 100% { transform: translateY(1px) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1deg); } }
     @keyframes balto-trail { 0%, 100% { transform: scaleX(.45); opacity: .16; } 50% { transform: scaleX(1); opacity: .72; } }
+    @keyframes balto-update { to { transform: translateY(3px); opacity: .5; } }
     [data-balto-brand="true"] { width: auto !important; display: inline-flex !important; align-items: center !important; gap: 9px !important; color: #f5f7f8 !important; }
     [data-balto-brand="true"] > img { width: 27px !important; height: 27px !important; flex: 0 0 27px; }
     button[aria-label="Open sidebar"] > svg:not([data-balto-collapse-icon]) { display: none !important; }
@@ -599,6 +608,7 @@
       #balto-live-bar .balto-meter { min-width: 64px; gap: 4px; }
       #balto-live-bar .balto-value { font-size: 20px; letter-spacing: -1px; }
       #balto-live-bar .balto-unit { font-size: 7px; letter-spacing: .5px; }
+      #balto-live-bar .balto-update-button { width: 29px; height: 29px; flex-basis: 29px; margin-left: 1px; }
       .wSkVaW_root {
         --dsh-chat-content-width: 100%;
         --dsh-composer-card-max-width: 100%;
@@ -744,10 +754,16 @@
   bar.innerHTML = `
     <div class="balto-sprinter" aria-hidden="true"><img src="/assets/balto-mark.svg" alt=""></div>
     <div class="balto-meter"><span class="balto-value">0</span><span class="balto-unit">TOK/S</span></div>
+    <button type="button" class="balto-update-button" aria-label="Install Balto update" title="Install Balto update" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12m-5-5 5 5 5-5M6 20h12"/></svg>
+    </button>
   `
   document.body.append(bar)
 
   const value = bar.querySelector('.balto-value')
+  const updateButton = bar.querySelector('.balto-update-button')
+  let availableUpdate = null
+  let updateInstalling = false
   let shown = 0
   let target = 0
   function animate() {
@@ -779,6 +795,45 @@
   }
   poll()
   setInterval(poll, 300)
+
+  async function checkForUpdates() {
+    if (!tauriInvoke || updateInstalling) return
+    try {
+      const update = await tauriInvoke('check_for_updates')
+      availableUpdate = update.availableVersion || null
+      updateButton.hidden = !availableUpdate
+      if (availableUpdate) {
+        updateButton.title = `Install Balto ${availableUpdate}`
+        updateButton.setAttribute('aria-label', `Install Balto ${availableUpdate}`)
+      }
+    } catch {
+      updateButton.hidden = true
+    }
+  }
+
+  async function installAvailableUpdate() {
+    if (!tauriInvoke || !availableUpdate || updateInstalling) return
+    updateInstalling = true
+    updateButton.disabled = true
+    updateButton.dataset.installing = 'true'
+    updateButton.title = `Installing Balto ${availableUpdate}`
+    updateButton.setAttribute('aria-label', `Installing Balto ${availableUpdate}`)
+    try {
+      await tauriInvoke('install_update')
+    } catch {
+      updateInstalling = false
+      updateButton.disabled = false
+      updateButton.dataset.installing = 'false'
+      updateButton.title = `Retry Balto ${availableUpdate}`
+      updateButton.setAttribute('aria-label', `Retry Balto ${availableUpdate}`)
+    }
+  }
+
+  updateButton.addEventListener('click', () => void installAvailableUpdate())
+  if (tauriInvoke) {
+    void checkForUpdates()
+    setInterval(() => void checkForUpdates(), 60000)
+  }
 
   const replacements = new Map([
     ['DeepSeek Harness', 'Balto Speedrunner'],
