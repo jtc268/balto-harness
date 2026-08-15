@@ -334,10 +334,14 @@ fn open_workspace(app: AppHandle, fresh: Option<bool>) -> Result<(), String> {
     if !read_status(&app)?.workspace_ready {
         return Err("Balto is still starting.".into());
     }
+    navigate_to_workspace(&app, fresh.unwrap_or(false))
+}
+
+fn navigate_to_workspace(app: &AppHandle, fresh: bool) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "Balto window is unavailable.".to_string())?;
-    let workspace_url = if fresh.unwrap_or(false) {
+    let workspace_url = if fresh {
         "http://127.0.0.1:3080/?balto=new"
     } else {
         "http://127.0.0.1:3080/"
@@ -357,6 +361,11 @@ pub fn run() {
             }
         }))
         .setup(|app| {
+            if read_status(app.handle())
+                .is_ok_and(|status| status.workspace_ready && status.inference_ready)
+            {
+                let _ = navigate_to_workspace(app.handle(), false);
+            }
             run_service_watchdog(app.handle().clone());
             Ok(())
         })

@@ -1,7 +1,7 @@
 {
   "name": "balto-speedrunner",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.6",
   "description": "One-click local coding agent for RTX 5090 systems",
   "license": "MIT",
   "author": "Adore LLC",
@@ -9,10 +9,17 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "check": "node --check src/app.js && node --check runtime/gateway.mjs && node --check runtime/patch-dsh.mjs",
+    "check": "node --check src/app.js && node --check runtime/gateway.mjs && node --check runtime/patch-compaction-engine.mjs && node --check runtime/patch-dsh.mjs && node --check runtime/configure-settings.mjs",
+    "pretest": "node runtime/patch-compaction-engine.mjs node_modules/@deepseek-ai",
     "test": "node --test test/*.test.mjs && powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File test/native-warning.test.ps1"
   },
   "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction-basic": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-token-meter": "^0.1.0-rc.6",
     "@tauri-apps/cli": "2.11.4"
   }
 }

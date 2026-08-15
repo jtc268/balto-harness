@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="/styles.css" />
     <script defer src="/app.js"></script>
   </head>
-  <body>
+  <body class="launch-pending">
     <div class="noise" aria-hidden="true"></div>
     <header class="topbar">
       <a class="brand" href="#" aria-label="Balto Speedrunner home">
@@ -131,11 +131,13 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 15a4 4 0 0 1 .5-8A6 6 0 0 1 17 8a4 4 0 1 1 1 7H5Zm7-4v9m-3-3 3 3 3-3"/></svg>
         </div>
         <div class="remote-copy">
-          <strong>Private web app</strong>
+          <strong>Remote control</strong>
+          <span>Use Balto securely from another device. Both devices must run Tailscale and be signed into the same tailnet.</span>
           <span id="remote-description">Available after Balto starts</span>
-          <a id="remote-url" href="#" aria-label="Open your private Balto web app" hidden></a>
+          <a id="remote-url" href="#" aria-label="Open your Balto remote control link" hidden></a>
+          <a href="https://tailscale.com/download" target="_blank" rel="noopener noreferrer">Get Tailscale</a>
         </div>
-        <label class="switch" aria-label="Enable private remote access">
+        <label class="switch" aria-label="Enable remote control">
           <input id="remote-toggle" type="checkbox" />
           <span></span>
         </label>

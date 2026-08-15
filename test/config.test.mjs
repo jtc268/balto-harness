@@ -8,14 +8,17 @@ test('ships the exact one-5090 inference configuration', async () => {
   const script = await read('runtime/balto.ps1')
   for (const required of [
     "'--context-length', '80000'",
-    "'--kv-cache-dtype', 'fp8_e4m3'",
     "'--attention-backend', 'flashinfer'",
     "'--max-running-requests', '1'",
     "'--speculative-algorithm', 'DSPARK'",
-    "'--speculative-dspark-block-size', '7'",
+    "'--speculative-draft-model-quantization', 'fp8'",
+    "'--disable-radix-cache'",
+    "'--random-seed', '447402790'",
     "'--model-path', $modelName",
     "'--speculative-draft-model-path', $draftName",
   ]) assert.match(script, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.doesNotMatch(script, /--kv-cache-dtype/)
+  assert.doesNotMatch(script, /--speculative-dspark-block-size/)
   assert.match(script, /lmsysorg\/sglang@sha256:[a-f0-9]{64}/)
   assert.match(script, /com\.adore\.balto\.config/)
   assert.match(script, /balto-qwen38-cache/)
@@ -23,11 +26,30 @@ test('ships the exact one-5090 inference configuration', async () => {
   assert.match(script, /Reusing the existing Qwen 3\.8 model cache without copying or downloading it again/)
 })
 
+test('advertises native Qwen image input to the coding workspace', async () => {
+  const settings = await read('runtime/templates/settings.yaml')
+  assert.match(settings, /defaultInput:\s*\n\s*- text\s*\n\s*- image/)
+  assert.match(settings, /input:\s*\n\s*- text\s*\n\s*- image/)
+})
+
 test('remote access remains tailnet-only', async () => {
   const script = await read('runtime/balto.ps1')
+  const gateway = await read('runtime/gateway.mjs')
+  const workspaceUi = await read('runtime/assets/balto-ui.js')
   assert.match(script, /Invoke-LoggedNative -FilePath 'tailscale' -Arguments @\('serve', '--bg', '--yes', '--https=3080', '127\.0\.0\.1:3080'\)/)
   assert.match(script, /Invoke-LoggedNative -FilePath 'tailscale' -Arguments @\('serve', '--bg', '--yes', '--https=30100', '127\.0\.0\.1:30100'\)/)
   assert.doesNotMatch(script, /tailscale funnel/i)
+  assert.match(script, /\$env:BALTO_DATA = \$BaltoData/)
+  assert.match(script, /\$env:BALTO_RESOURCES = \$Resources/)
+  assert.match(gateway, /requestUrl\.pathname === '\/remote'/)
+  assert.match(gateway, /hostname\.endsWith\('\.ts\.net'\)/)
+  assert.match(gateway, /windowsHide: true/)
+  assert.match(workspaceUi, /function mountRemoteSettings\(\)/)
+  assert.match(workspaceUi, />Remote control</)
+  assert.match(workspaceUi, /Both devices must run Tailscale and be signed into the same tailnet/)
+  assert.match(workspaceUi, /href="https:\/\/tailscale\.com\/download"/)
+  assert.match(workspaceUi, />Copy remote link</)
+  assert.match(workspaceUi, /changeRemoteStatus\(event\.currentTarget\.checked\)/)
 })
 
 test('release config uses a signed updater and NSIS', async () => {
@@ -69,6 +91,7 @@ test('product copy contains no em dash characters', async () => {
 test('first launch sets itself up and opens the familiar workspace', async () => {
   const app = await read('src/app.js')
   const html = await read('src/index.html')
+  const styles = await read('src/styles.css')
   assert.match(app, /status\.phase === 'not-installed'/)
   assert.match(app, /status\.phase === 'failed'/)
   assert.match(app, /\['degraded', 'stopped'\]\.includes\(status\.phase\)/)
@@ -78,6 +101,10 @@ test('first launch sets itself up and opens the familiar workspace', async () =>
   assert.match(app, /scheduleAutomaticRecovery\(status\)/)
   assert.match(app, /Retrying automatically/)
   assert.match(app, /invoke\('open_workspace', \{ fresh \}\)/)
+  assert.doesNotMatch(app, /setTimeout\(\(\) => invoke\('open_workspace'/)
+  assert.match(app, /document\.body\.classList\.remove\('launch-pending'\)/)
+  assert.match(html, /<body class="launch-pending">/)
+  assert.match(styles, /body\.launch-pending > \* \{ visibility: hidden; \}/)
   assert.match(app, /freshWorkspaceRequested = true/)
   assert.match(app, /renderJourney\(status, progress, ready, failed, recovering\)/)
   assert.match(app, /status\.downloadedGb/)
@@ -100,7 +127,8 @@ test('first launch sets itself up and opens the familiar workspace', async () =>
   assert.match(setup, /'--balto-launch-hidden'/)
   assert.match(setup, /'restart-workspace'/)
   assert.match(setup, /Invoke-HiddenNativeNoOutput -FilePath \$AppExe -Arguments \$launcherArguments/)
-  assert.match(setup, /http:\/\/127\.0\.0\.1:30000\/health/)
+  assert.match(setup, /http:\/\/127\.0\.0\.1:30000\/v1\/models/)
+  assert.doesNotMatch(setup, /http:\/\/127\.0\.0\.1:30000\/health/)
   assert.match(setup, /js-yaml@4\.2\.0/)
   assert.match(setup, /\[System\.IO\.DriveInfo\]::GetDrives\(\)/)
   assert.match(setup, /\[System\.Diagnostics\.ProcessStartInfo\]::new\(\)/)
@@ -128,8 +156,9 @@ test('first launch sets itself up and opens the familiar workspace', async () =>
   assert.match(html, /Code at 150 tok\/s · Chat at up to 300 tok\/s</)
   assert.match(html, /<strong>Qwen model<\/strong><span>Optimized for this RTX 5090<\/span>/)
   assert.match(html, /<strong>Coding workspace<\/strong><span>Efficient local tool calls<\/span>/)
-  assert.match(html, /<strong>Private web app<\/strong>/)
-  assert.match(app, /Turn on to get your private web app link/)
+  assert.match(html, /<strong>Remote control<\/strong>/)
+  assert.match(html, /Both devices must run Tailscale and be signed into the same tailnet/)
+  assert.match(app, /Turn on to create your remote control link/)
   assert.match(app, /elements\.remoteUrl\.textContent = status\.remoteUrl/)
   const workspaceUi = await read('runtime/assets/balto-ui.js')
   assert.match(workspaceUi, /URLSearchParams\(location\.search\)\.get\('balto'\) !== 'new'/)
@@ -146,6 +175,9 @@ test('first launch sets itself up and opens the familiar workspace', async () =>
   assert.match(workspaceUi, /balto-mark\.svg/)
   const nativeShell = await read('src-tauri/src/lib.rs')
   assert.match(nativeShell, /http:\/\/127\.0\.0\.1:3080\/\?balto=new/)
+  assert.match(nativeShell, /fn navigate_to_workspace\(app: &AppHandle, fresh: bool\)/)
+  assert.match(nativeShell, /status\.workspace_ready && status\.inference_ready/)
+  assert.match(nativeShell, /navigate_to_workspace\(app\.handle\(\), false\)/)
   assert.match(nativeShell, /fn run_service_watchdog/)
   assert.match(nativeShell, /matches!\(refreshed\.phase\.as_str\(\), "degraded" \| "failed"\)/)
   assert.match(nativeShell, /powershell_command\(&script, "start"/)
@@ -182,7 +214,58 @@ test('fresh installs boot only Balto Qwen while user-added models persist', asyn
   assert.match(settings, /displayName: Balto Qwen/)
   assert.match(settings, /name: Balto Qwen 3\.8 27B/)
   assert.match(profile, /id: llm-deepseek\s+disabled: true/)
+  assert.match(profile, /id: session-log-download\s+disabled: true/)
   assert.match(setup, /if \(-not \(Test-Path -LiteralPath \$settingsPath\)\)/)
   assert.doesNotMatch(setup, /settings\.yaml'\) -Destination \(Join-Path \$dshHome 'settings\.yaml'\) -Force/)
+  assert.match(setup, /configure-settings\.mjs/)
   assert.match(setup, /'--profile', 'web', '--patch', \$profilePatch/)
+})
+
+test('long jobs compact early, retry transient streams, and continue automatically', async () => {
+  const settings = await read('runtime/templates/settings.yaml')
+  const profile = await read('runtime/templates/profile.patch.yml')
+  const patch = await read('runtime/patch-dsh.mjs')
+
+  assert.match(profile, /id: compaction-basic\s+disabled: false/)
+  assert.match(profile, /thresholdRatio: 0\.45/)
+  assert.match(profile, /retainTokens: 12000/)
+  assert.match(profile, /maxTokens: 1536/)
+  assert.match(profile, /compactionRetries: 2/)
+  assert.match(profile, /maxOverflowRetries: 3/)
+  assert.match(profile, /id: tool-result-pruner\s+disabled: false/)
+  assert.match(profile, /id: tool-goal\s+disabled: false/)
+  assert.match(settings, /retryPolicy:\s+mode: normal\s+maxRetries: 5/)
+  assert.match(settings, /defaultMaxTokens: 32768/)
+  assert.match(settings, /agent-presets:\s+default: standard/)
+  assert.match(patch, /state\.needsCheckpoint = true/)
+  assert.match(patch, /requestDrive\(state\)/)
+  assert.match(patch, /could not pause failed goal/)
+  assert.match(patch, /plugin: \"balto-auto-continuation\"/)
+  assert.match(patch, /this\.inbox\.splice\(\"next-step\"/)
+  assert.match(patch, /return null/)
+  assert.match(patch, /patchCodePresetToolPresentation/)
+  assert.match(patch, /mode:\) both/)
+  assert.match(patch, /patchDurableAgentPersonas/)
+  assert.match(patch, /checkpoint progress through completed tool calls/)
+  assert.match(patch, /Within 500 output tokens, execute the next concrete tool call/)
+  assert.match(patch, /legacyContinuationText/)
+  assert.match(patch, /durableContinuationText/)
+  assert.match(patch, /patchMaxTokenReplaySafety/)
+  assert.match(patch, /finish\.kind !== \"max-tokens\"/)
+  assert.match(patch, /state\.stopReason === \"length\"/)
+  assert.match(await read('runtime/patch-compaction-engine.mjs'), /selected\.shadowedTokenCount < spec\.maxTokens \* 2/)
+})
+
+test('settings migration preserves user providers while upgrading the Balto route', async () => {
+  const migration = await read('runtime/configure-settings.mjs')
+  assert.match(migration, /providers\.sglang/)
+  assert.match(migration, /currentModels/)
+  assert.match(migration, /managedModelIndex/)
+  assert.doesNotMatch(migration, /settings\s*=\s*template/)
+
+  const setup = await read('runtime/balto.ps1')
+  const restartStart = setup.lastIndexOf("'restart-workspace'")
+  const restart = setup.slice(restartStart, setup.indexOf("'remote-on'", restartStart))
+  assert.match(restart, /Stop-BaltoProcess 'gateway\.pid' 'gateway\.mjs'/)
+  assert.doesNotMatch(restart, /docker.*stop/i)
 })
