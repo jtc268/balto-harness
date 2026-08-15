@@ -36,11 +36,16 @@ function tuneRequest(buffer, path) {
   if (!path.endsWith('/chat/completions')) return buffer
   const body = JSON.parse(buffer.toString('utf8'))
   body.model = servedModel
+  body.messages = body.messages?.map((message) =>
+    message?.role === 'developer' ? { ...message, role: 'system' } : message,
+  )
   body.temperature ??= 0.6
   body.top_p ??= 0.95
   body.top_k ??= 20
   body.seed ??= 0
-  body.max_tokens = Math.min(Number(body.max_tokens || 32768), 32768)
+  const requestedMaxTokens = Number(body.max_tokens ?? body.max_completion_tokens ?? 32768)
+  body.max_tokens = Math.min(requestedMaxTokens, 32768)
+  delete body.max_completion_tokens
   if (body.stream) {
     body.stream_options = { ...(body.stream_options || {}), include_usage: true, continuous_usage_stats: true }
   }
