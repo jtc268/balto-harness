@@ -91,6 +91,54 @@ test('gateway applies safe sampling and reports exact streaming speed', async (c
 
   const telemetry = await fetch(`http://127.0.0.1:${gatewayPort}/speed`).then((item) => item.json())
   assert.equal(telemetry.state, 'complete')
+  assert.equal(telemetry.error, null)
   assert.equal(telemetry.completionTokens, 4)
   assert.ok(telemetry.tokensPerSecond > 0)
+})
+
+test('gateway survives an interrupted upstream stream and remains healthy', async (context) => {
+  const upstream = http.createServer(async (request, response) => {
+    if (request.url === '/health') {
+      response.writeHead(200).end('ok')
+      return
+    }
+    for await (const _chunk of request) {
+      // Drain the request before forcing a mid-stream reset.
+    }
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.flushHeaders()
+    response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'partial' } }] })}\n\n`)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    response.socket.destroy()
+  })
+  const upstreamPort = await listen(upstream)
+  context.after(() => upstream.close())
+
+  const portProbe = http.createServer()
+  const gatewayPort = await listen(portProbe)
+  await new Promise((resolve) => portProbe.close(resolve))
+
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../runtime/gateway.mjs', import.meta.url))], {
+    env: {
+      ...process.env,
+      BALTO_GATEWAY_PORT: String(gatewayPort),
+      BALTO_INFERENCE_URL: `http://127.0.0.1:${upstreamPort}`,
+    },
+    stdio: 'ignore',
+  })
+  context.after(() => child.kill())
+
+  await waitFor(`http://127.0.0.1:${gatewayPort}/health`)
+  const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'anything', stream: true, messages: [{ role: 'user', content: 'test' }] }),
+  })
+  await response.text()
+
+  assert.equal(child.exitCode, null)
+  await waitFor(`http://127.0.0.1:${gatewayPort}/health`)
+  const telemetry = await fetch(`http://127.0.0.1:${gatewayPort}/speed`).then((item) => item.json())
+  assert.equal(telemetry.state, 'error')
+  assert.match(telemetry.error, /terminated|reset|socket|closed/i)
 })

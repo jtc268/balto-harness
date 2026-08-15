@@ -540,6 +540,12 @@ function Ensure-WorkspaceRuntime {
     Copy-Item -LiteralPath (Join-Path $Resources 'templates\settings.yaml') -Destination $settingsPath
     Write-Log 'Created the Balto Qwen model profile.'
   }
+  Invoke-LoggedNative -FilePath $nodeExe -Arguments @(
+    (Join-Path $Resources 'configure-settings.mjs'),
+    $settingsPath,
+    (Join-Path $Resources 'templates\settings.yaml'),
+    $yamlModule
+  ) -Prefix 'settings'
   Ensure-DefaultWorkspace
 }
 
@@ -839,6 +845,7 @@ try {
     }
     'restart-workspace' {
       Stop-BaltoProcess 'workspace.pid' 'dsh\lib\bin.js'
+      Stop-BaltoProcess 'gateway.pid' 'gateway.mjs'
       Ensure-NodeRuntime
       Ensure-WorkspaceRuntime
       Start-LocalServices

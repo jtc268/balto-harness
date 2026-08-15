@@ -184,5 +184,37 @@ test('fresh installs boot only Balto Qwen while user-added models persist', asyn
   assert.match(profile, /id: llm-deepseek\s+disabled: true/)
   assert.match(setup, /if \(-not \(Test-Path -LiteralPath \$settingsPath\)\)/)
   assert.doesNotMatch(setup, /settings\.yaml'\) -Destination \(Join-Path \$dshHome 'settings\.yaml'\) -Force/)
+  assert.match(setup, /configure-settings\.mjs/)
   assert.match(setup, /'--profile', 'web', '--patch', \$profilePatch/)
+})
+
+test('long jobs compact early, retry transient streams, and continue automatically', async () => {
+  const settings = await read('runtime/templates/settings.yaml')
+  const profile = await read('runtime/templates/profile.patch.yml')
+  const patch = await read('runtime/patch-dsh.mjs')
+
+  assert.match(profile, /id: compaction-basic\s+disabled: false/)
+  assert.match(profile, /thresholdRatio: 0\.45/)
+  assert.match(profile, /retainTokens: 12000/)
+  assert.match(profile, /compactionRetries: 2/)
+  assert.match(profile, /maxOverflowRetries: 3/)
+  assert.match(profile, /id: tool-result-pruner\s+disabled: false/)
+  assert.match(profile, /id: tool-goal\s+disabled: false/)
+  assert.match(settings, /retryPolicy:\s+mode: normal\s+maxRetries: 5/)
+  assert.match(patch, /state\.needsCheckpoint = true/)
+  assert.match(patch, /requestDrive\(state\)/)
+})
+
+test('settings migration preserves user providers while upgrading the Balto route', async () => {
+  const migration = await read('runtime/configure-settings.mjs')
+  assert.match(migration, /providers\.sglang/)
+  assert.match(migration, /currentModels/)
+  assert.match(migration, /managedModelIndex/)
+  assert.doesNotMatch(migration, /settings\s*=\s*template/)
+
+  const setup = await read('runtime/balto.ps1')
+  const restartStart = setup.lastIndexOf("'restart-workspace'")
+  const restart = setup.slice(restartStart, setup.indexOf("'remote-on'", restartStart))
+  assert.match(restart, /Stop-BaltoProcess 'gateway\.pid' 'gateway\.mjs'/)
+  assert.doesNotMatch(restart, /docker.*stop/i)
 })

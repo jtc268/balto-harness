@@ -11,6 +11,7 @@ const speed = {
   tokensPerSecond: 0,
   completionTokens: 0,
   elapsedSeconds: 0,
+  error: null,
   updatedAt: new Date().toISOString(),
 }
 
@@ -77,10 +78,16 @@ function updateSpeedFromEvent(line, requestState) {
 
 async function proxy(request, response) {
   const target = new URL(request.url, upstream)
+  const upstreamAbort = new AbortController()
+  const abortUpstream = () => {
+    if (!response.writableEnded) upstreamAbort.abort(new Error('Balto client disconnected'))
+  }
+  response.once('close', abortUpstream)
   let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await readBody(request)
   try {
     if (body?.length) body = tuneRequest(body, target.pathname)
   } catch (error) {
+    response.off('close', abortUpstream)
     json(response, 400, { error: { message: `Invalid JSON request: ${error.message}` } })
     return
   }
@@ -103,8 +110,16 @@ async function proxy(request, response) {
 
   let upstreamResponse
   try {
-    upstreamResponse = await fetch(target, { method: request.method, headers, body, duplex: body ? 'half' : undefined })
+    upstreamResponse = await fetch(target, {
+      method: request.method,
+      headers,
+      body,
+      duplex: body ? 'half' : undefined,
+      signal: upstreamAbort.signal,
+    })
   } catch (error) {
+    response.off('close', abortUpstream)
+    if (upstreamAbort.signal.aborted) return
     const detail = error.cause?.message || error.message
     json(response, 502, { error: { message: `Balto inference is unavailable: ${detail}` } })
     return
@@ -117,14 +132,19 @@ async function proxy(request, response) {
   response.writeHead(upstreamResponse.status, responseHeaders)
 
   if (!upstreamResponse.body) {
+    response.off('close', abortUpstream)
     response.end()
     return
   }
 
   const isStream = (upstreamResponse.headers.get('content-type') || '').includes('text/event-stream')
   if (!isStream) {
-    const output = Buffer.from(await upstreamResponse.arrayBuffer())
-    response.end(output)
+    try {
+      const output = Buffer.from(await upstreamResponse.arrayBuffer())
+      response.end(output)
+    } finally {
+      response.off('close', abortUpstream)
+    }
     return
   }
 
@@ -132,9 +152,11 @@ async function proxy(request, response) {
   speed.tokensPerSecond = 0
   speed.completionTokens = 0
   speed.elapsedSeconds = 0
+  speed.error = null
   speed.updatedAt = new Date().toISOString()
   const requestState = { firstTokenAt: 0, pending: '' }
   const reader = upstreamResponse.body.getReader()
+  let streamError = null
   try {
     while (true) {
       const { done, value } = await reader.read()
@@ -146,14 +168,28 @@ async function proxy(request, response) {
       requestState.pending = lines.pop() || ''
       for (const line of lines) updateSpeedFromEvent(line, requestState)
     }
+  } catch (error) {
+    streamError = error
+    if (!upstreamAbort.signal.aborted) {
+      const detail = error.cause?.message || error.message
+      speed.state = 'error'
+      speed.error = detail
+      speed.updatedAt = new Date().toISOString()
+      console.error(`Balto upstream stream interrupted: ${detail}`)
+    }
   } finally {
-    speed.state = 'complete'
+    response.off('close', abortUpstream)
+    reader.releaseLock()
+    if (!streamError) {
+      speed.state = 'complete'
+      speed.error = null
+    }
     speed.updatedAt = new Date().toISOString()
-    response.end()
+    if (!response.writableEnded && !response.destroyed) response.end()
   }
 }
 
-const server = http.createServer(async (request, response) => {
+async function handleRequest(request, response) {
   if (request.method === 'OPTIONS') {
     response.writeHead(204, {
       'access-control-allow-origin': '*',
@@ -177,6 +213,21 @@ const server = http.createServer(async (request, response) => {
     return
   }
   await proxy(request, response)
+}
+
+const server = http.createServer((request, response) => {
+  void handleRequest(request, response).catch((error) => {
+    const detail = error.cause?.message || error.message
+    speed.state = 'error'
+    speed.error = detail
+    speed.updatedAt = new Date().toISOString()
+    console.error(`Balto gateway request failed: ${detail}`)
+    if (!response.headersSent) {
+      json(response, 502, { error: { message: `Balto request failed: ${detail}` } })
+    } else if (!response.writableEnded && !response.destroyed) {
+      response.end()
+    }
+  })
 })
 
 server.listen(port, host, () => {

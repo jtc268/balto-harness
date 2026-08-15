@@ -1,7 +1,7 @@
 {
   "name": "balto-speedrunner",
   "private": true,
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "One-click local coding agent for RTX 5090 systems",
   "license": "MIT",
   "author": "Adore LLC",
@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "check": "node --check src/app.js && node --check runtime/gateway.mjs && node --check runtime/patch-dsh.mjs",
+    "check": "node --check src/app.js && node --check runtime/gateway.mjs && node --check runtime/patch-dsh.mjs && node --check runtime/configure-settings.mjs",
     "test": "node --test test/*.test.mjs && powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File test/native-warning.test.ps1"
   },
   "devDependencies": {

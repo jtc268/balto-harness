@@ -15,12 +15,18 @@ test('branding patch runs before the upstream module and removes its boot wordma
   const dshRoot = join(root, 'dsh')
   const dist = join(dshRoot, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist')
   const assets = join(dist, 'assets')
+  const goalDriver = join(dshRoot, 'node_modules', '@deepseek-ai', 'dsh-goal-round-driver', 'lib')
   await mkdir(assets, { recursive: true })
+  await mkdir(goalDriver, { recursive: true })
   await writeFile(
     join(dist, 'index.html'),
     '<html><head><title>DeepSeek Harness</title><script type="module" src="/assets/app.js"></script></head><body><div id="root"></div></body></html>',
   )
   await writeFile(join(assets, 'app.js'), 'const boot={children:"HARNESS"};const product="DeepSeek Harness"')
+  await writeFile(
+    join(goalDriver, 'index.js'),
+    'if (event.data.reason.kind === "max-tokens") {\n\t\t\t\t\t\tdisarm(state);\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}',
+  )
 
   try {
     await execFileAsync(process.execPath, [join(repoRoot, 'runtime', 'patch-dsh.mjs'), dshRoot, join(repoRoot, 'runtime')])
@@ -33,6 +39,10 @@ test('branding patch runs before the upstream module and removes its boot wordma
     assert.doesNotMatch(bundle, /HARNESS/)
     assert.doesNotMatch(bundle, /DeepSeek Harness/)
     assert.match(bundle, /children:"BALTO"/)
+    const continuation = await readFile(join(goalDriver, 'index.js'), 'utf8')
+    assert.match(continuation, /state\.needsCheckpoint = true/)
+    assert.match(continuation, /requestDrive\(state\)/)
+    assert.doesNotMatch(continuation, /disarm\(state\)/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

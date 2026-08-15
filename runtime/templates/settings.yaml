@@ -18,6 +18,19 @@ llm-pi-ai:
       defaultMaxTokens: 32768
       defaultInput:
         - text
+      retryPolicy:
+        mode: normal
+        maxRetries: 5
+        retryableCodes:
+          - EMPTY_RESPONSE
+          - RATE_LIMIT
+          - SERVER
+          - TIMEOUT
+          - TRANSPORT
+        backoff:
+          initialDelayMs: 500
+          maxDelayMs: 5000
+          jitterRatio: 0.1
       models:
         - id: qwen3.8-27b-nvfp4-dspark
           name: Balto Qwen 3.8 27B
