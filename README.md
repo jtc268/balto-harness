@@ -1,10 +1,29 @@
 <p align="center">
-  <img src="src/balto-mark.svg" width="88" alt="Balto dog mark" />
+  <img src="docs/balto-github-hero.svg" width="100%" alt="Balto. Double your inference speed with Qwen 3.8 27B on one RTX 5090." />
 </p>
 
-# Balto Speedrunner for Qwen 3.8 27B on an RTX 5090 - Windows
+<h1 align="center">Double your inference speed with Qwen 3.8 27B</h1>
 
-Qwen 3.8 27B at 2x the speed on one RTX 5090. Code at ~100-150 tok/s. Chat at up to 300 tok/s.
+<p align="center">
+  <strong>One RTX 5090. One clean Windows install. A local coding agent that moves.</strong>
+</p>
+
+<p align="center">
+  <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-70d8ff?style=flat-square&logo=windows11&logoColor=white" />
+  <img alt="NVIDIA RTX 5090" src="https://img.shields.io/badge/NVIDIA-RTX%205090-76B900?style=flat-square&logo=nvidia&logoColor=white" />
+  <img alt="Qwen 3.8 27B" src="https://img.shields.io/badge/Qwen-3.8%2027B-8b7dff?style=flat-square" />
+  <img alt="Coding speed" src="https://img.shields.io/badge/Coding-150%2B%20tok%2Fs-54df9b?style=flat-square" />
+</p>
+
+<p align="center">
+  <a href="#what-the-installer-does"><strong>How it works</strong></a>
+  &nbsp;&nbsp;•&nbsp;&nbsp;
+  <a href="#measured-on-our-rtx-5090"><strong>Benchmarks</strong></a>
+  &nbsp;&nbsp;•&nbsp;&nbsp;
+  <a href="https://buymeacoffee.com/refresh1"><strong>Support Balto</strong></a>
+</p>
+
+Balto turns Qwen 3.8 27B into a fast local coding agent for one RTX 5090. Expect roughly 150 tok/s during real coding runs and up to 300 tok/s on clean chat prompts.
 
 Run the installer, approve Windows if it asks to enable WSL, and Balto handles the rest. It resumes setup after a required restart, preserves partial downloads, and opens the coding workspace as soon as the model is ready.
 
