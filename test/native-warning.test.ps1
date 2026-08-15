@@ -11,7 +11,7 @@ $qaParseErrors = $null
 [void][System.Management.Automation.Language.Parser]::ParseFile($qaScriptPath, [ref]$qaTokens, [ref]$qaParseErrors)
 if ($qaParseErrors.Count -gt 0) { throw $qaParseErrors[0].Message }
 
-foreach ($name in @('Write-Log', 'ConvertTo-NativeArgument', 'Invoke-LoggedNative')) {
+foreach ($name in @('Write-Log', 'ConvertTo-NativeArgument', 'Invoke-HiddenNativeCapture', 'Invoke-LoggedNative')) {
   $functionAst = $ast.Find({
       param($node)
       $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name

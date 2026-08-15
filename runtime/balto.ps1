@@ -80,12 +80,10 @@ function ConvertTo-NativeArgument([AllowEmptyString()][string]$Argument) {
   return $builder.ToString()
 }
 
-function Invoke-LoggedNative {
+function Invoke-HiddenNativeCapture {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
-    [string[]]$Arguments = @(),
-    [Parameter(Mandatory = $true)][string]$Prefix,
-    [switch]$AllowFailure
+    [string[]]$Arguments = @()
   )
 
   $process = $null
@@ -114,13 +112,53 @@ function Invoke-LoggedNative {
     if ($process) { $process.Dispose() }
   }
 
-  foreach ($stream in @($stdout, $stderr)) {
+  return [pscustomobject]@{
+    ExitCode = $exitCode
+    StdOut = $stdout
+    StdErr = $stderr
+  }
+}
+
+function Invoke-HiddenNativeNoOutput {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [string[]]$Arguments = @()
+  )
+
+  $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $startInfo.FileName = $FilePath
+  $startInfo.Arguments = (($Arguments | ForEach-Object { ConvertTo-NativeArgument ([string]$_) }) -join ' ')
+  $startInfo.UseShellExecute = $false
+  $startInfo.CreateNoWindow = $true
+
+  $process = [System.Diagnostics.Process]::new()
+  try {
+    $process.StartInfo = $startInfo
+    if (-not $process.Start()) { throw "Could not start $FilePath." }
+    $process.WaitForExit()
+    return $process.ExitCode
+  }
+  finally {
+    $process.Dispose()
+  }
+}
+
+function Invoke-LoggedNative {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [string[]]$Arguments = @(),
+    [Parameter(Mandatory = $true)][string]$Prefix,
+    [switch]$AllowFailure
+  )
+
+  $result = Invoke-HiddenNativeCapture -FilePath $FilePath -Arguments $Arguments
+  foreach ($stream in @($result.StdOut, $result.StdErr)) {
     foreach ($line in ($stream -split '\r?\n')) {
       if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Log "${Prefix}: $line" }
     }
   }
-  if ($exitCode -ne 0 -and -not $AllowFailure) {
-    throw "$Prefix exited with code $exitCode. Open the setup log for details."
+  if ($result.ExitCode -ne 0 -and -not $AllowFailure) {
+    throw "$Prefix exited with code $($result.ExitCode). Open the setup log for details."
   }
 }
 
@@ -225,7 +263,9 @@ function Get-TailscaleInfo {
   if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) { return $result }
   $result.installed = $true
   try {
-    $status = (& tailscale status --json 2>$null | Out-String) | ConvertFrom-Json
+    $statusResult = Invoke-HiddenNativeCapture -FilePath 'tailscale' -Arguments @('status', '--json')
+    if ($statusResult.ExitCode -ne 0) { throw "Tailscale status exited with code $($statusResult.ExitCode)." }
+    $status = $statusResult.StdOut | ConvertFrom-Json
     $result.signedIn = $status.BackendState -eq 'Running'
     if ($status.Self.DNSName) { $result.dnsName = $status.Self.DNSName.TrimEnd('.') }
   }
@@ -236,7 +276,9 @@ function Get-TailscaleInfo {
 function Test-RemoteEnabled([string]$DnsName) {
   if (-not $DnsName) { return $false }
   try {
-    $serve = (& tailscale serve status --json 2>$null | Out-String) | ConvertFrom-Json
+    $serveResult = Invoke-HiddenNativeCapture -FilePath 'tailscale' -Arguments @('serve', 'status', '--json')
+    if ($serveResult.ExitCode -ne 0) { throw "Tailscale Serve status exited with code $($serveResult.ExitCode)." }
+    $serve = $serveResult.StdOut | ConvertFrom-Json
     foreach ($property in $serve.Web.PSObject.Properties) {
       if ($property.Name -eq "${DnsName}:3080" -and $property.Value.Handlers.'/'.Proxy -eq 'http://127.0.0.1:3080') { return $true }
     }
@@ -252,7 +294,9 @@ function Refresh-Status([switch]$PreservePhase) {
   $gpuUsed = $null
   if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     try {
-      $gpuLine = (& nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits 2>$null | Select-Object -First 1)
+      $gpuResult = Invoke-HiddenNativeCapture -FilePath 'nvidia-smi' -Arguments @('--query-gpu=name,memory.total,memory.used', '--format=csv,noheader,nounits')
+      if ($gpuResult.ExitCode -ne 0) { throw "GPU check exited with code $($gpuResult.ExitCode)." }
+      $gpuLine = ($gpuResult.StdOut -split '\r?\n' | Select-Object -First 1)
       if ($gpuLine) {
         $gpuParts = $gpuLine -split ',' | ForEach-Object { $_.Trim() }
         $gpuName = $gpuParts[0]
@@ -266,14 +310,22 @@ function Refresh-Status([switch]$PreservePhase) {
   $dockerInstalled = [bool](Get-Command docker -ErrorAction SilentlyContinue)
   $dockerReady = $false
   if ($dockerInstalled) {
-    try { $dockerReady = [bool](& docker info --format '{{.ServerVersion}}' 2>$null) } catch { $dockerReady = $false }
+    try {
+      $dockerInfo = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('info', '--format', '{{.ServerVersion}}')
+      $dockerReady = $dockerInfo.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($dockerInfo.StdOut)
+    }
+    catch { $dockerReady = $false }
   }
 
   $tailscale = Get-TailscaleInfo
   $remoteEnabled = Test-RemoteEnabled $tailscale.dnsName
   $baltoContainerRunning = $false
   if ($dockerReady) {
-    try { $baltoContainerRunning = [bool](& docker ps --filter "name=^/$containerName$" --format '{{.Names}}' 2>$null) } catch {}
+    try {
+      $dockerPs = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('ps', '--filter', "name=^/$containerName$", '--format', '{{.Names}}')
+      $baltoContainerRunning = $dockerPs.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($dockerPs.StdOut)
+    }
+    catch {}
   }
   $inferenceReady = $baltoContainerRunning -and (Test-HttpReady 'http://127.0.0.1:30000/health')
   $gatewayReady = (Test-BaltoProcess 'gateway.pid' 'gateway.mjs') -and (Test-TcpPort 30100)
@@ -341,8 +393,8 @@ function Ensure-Wsl {
   $wslReady = $false
   if (Get-Command wsl.exe -ErrorAction SilentlyContinue) {
     try {
-      & wsl.exe --version *> $null
-      $wslReady = $LASTEXITCODE -eq 0
+      $wslVersion = Invoke-HiddenNativeCapture -FilePath 'wsl.exe' -Arguments @('--version')
+      $wslReady = $wslVersion.ExitCode -eq 0
     }
     catch { $wslReady = $false }
   }
@@ -350,12 +402,12 @@ function Ensure-Wsl {
 
   Update-State @{ phase = 'installing'; stage = 'windows'; progress = 11; message = 'Preparing Windows for high-speed local inference. Approve the Windows prompt if it appears.' }
   Write-Log 'Installing WSL without a user distribution.'
-  $wslInstall = Start-Process -FilePath 'wsl.exe' -ArgumentList @('--install', '--no-distribution', '--web-download') -Verb RunAs -Wait -PassThru
+  $wslInstall = Start-Process -FilePath 'wsl.exe' -ArgumentList @('--install', '--no-distribution', '--web-download') -Verb RunAs -Wait -PassThru -WindowStyle Hidden
   if ($wslInstall.ExitCode -ne 0) { throw "Windows inference support exited with code $($wslInstall.ExitCode)." }
 
   try {
-    & wsl.exe --version *> $null
-    if ($LASTEXITCODE -eq 0) { return }
+    $wslVersion = Invoke-HiddenNativeCapture -FilePath 'wsl.exe' -Arguments @('--version')
+    if ($wslVersion.ExitCode -eq 0) { return }
   }
   catch {}
   throw 'Windows inference support was installed. Restart Windows once, then Balto will continue automatically.'
@@ -379,7 +431,11 @@ function Ensure-Docker {
     if (Test-Path -LiteralPath $userDocker) { $env:PATH = "$userDocker;$env:PATH" }
   }
 
-  try { if (& docker info --format '{{.ServerVersion}}' 2>$null) { return } } catch {}
+  try {
+    $dockerInfo = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('info', '--format', '{{.ServerVersion}}')
+    if ($dockerInfo.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($dockerInfo.StdOut)) { return }
+  }
+  catch {}
   $desktopCandidates = @(
     (Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\Docker Desktop.exe'),
     'C:\Program Files\Docker\Docker\Docker Desktop.exe'
@@ -390,7 +446,11 @@ function Ensure-Docker {
     Start-Process -FilePath $desktop -WindowStyle Hidden | Out-Null
   }
   for ($attempt = 0; $attempt -lt 120; $attempt++) {
-    try { if (& docker info --format '{{.ServerVersion}}' 2>$null) { return } } catch {}
+    try {
+      $dockerInfo = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('info', '--format', '{{.ServerVersion}}')
+      if ($dockerInfo.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($dockerInfo.StdOut)) { return }
+    }
+    catch {}
     Start-Sleep -Seconds 2
   }
   throw 'Docker Desktop is installed but its engine did not start. A Windows restart may be required.'
@@ -503,30 +563,36 @@ function Start-BaltoProcess([string]$PidName, [string]$FilePath, [string[]]$Argu
   }
   $stdout = Join-Path $BaltoData "$PidName.out.log"
   $stderr = Join-Path $BaltoData "$PidName.err.log"
-  $quotedArguments = $Arguments | ForEach-Object {
-    if ($_ -match '[\s"]') { '"' + $_.Replace('"', '\"') + '"' } else { $_ }
+  if (-not $AppExe -or -not (Test-Path -LiteralPath $AppExe)) {
+    throw 'Balto could not find its hidden service launcher.'
   }
-  $startParameters = @{
-    FilePath = $FilePath
-    ArgumentList = $quotedArguments
-    WindowStyle = 'Hidden'
-    PassThru = $true
-    RedirectStandardOutput = $stdout
-    RedirectStandardError = $stderr
+  $launcherArguments = @(
+    '--balto-launch-hidden',
+    '--pid-file', $pidPath,
+    '--stdout', $stdout,
+    '--stderr', $stderr
+  )
+  if ($WorkingDirectory) { $launcherArguments += @('--cwd', $WorkingDirectory) }
+  $launcherArguments += @('--', $FilePath)
+  $launcherArguments += $Arguments
+  $launcherExitCode = Invoke-HiddenNativeNoOutput -FilePath $AppExe -Arguments $launcherArguments
+  if ($launcherExitCode -ne 0) { throw "Balto could not launch the $PidName service." }
+  if (-not (Test-Path -LiteralPath $pidPath)) { throw "Balto could not record the $PidName service." }
+  $processId = [int](Get-Content -LiteralPath $pidPath -Raw)
+  $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId"
+  if (-not $process -or $process.CommandLine -notlike "*$Needle*") {
+    throw "Balto could not verify the $PidName service."
   }
-  if ($WorkingDirectory) { $startParameters.WorkingDirectory = $WorkingDirectory }
-  $process = Start-Process @startParameters
-  [System.IO.File]::WriteAllText($pidPath, [string]$process.Id)
 }
 
 function Get-ModelCacheVolume {
-  $baltoCache = & docker volume ls --filter 'name=^balto-qwen38-cache$' --format '{{.Name}}' 2>$null
-  if ($baltoCache) { return 'balto-qwen38-cache' }
+  $baltoCache = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('volume', 'ls', '--filter', 'name=^balto-qwen38-cache$', '--format', '{{.Name}}')
+  if ($baltoCache.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($baltoCache.StdOut)) { return 'balto-qwen38-cache' }
 
   # Reuse the exact Qwen 3.8 cache from the original tuned stack when upgrading
   # this machine. Fresh installs receive Balto's own volume below.
-  $legacyCache = & docker volume ls --filter 'name=^qwen38-hf-cache$' --format '{{.Name}}' 2>$null
-  if ($legacyCache) {
+  $legacyCache = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('volume', 'ls', '--filter', 'name=^qwen38-hf-cache$', '--format', '{{.Name}}')
+  if ($legacyCache.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($legacyCache.StdOut)) {
     Write-Log 'Reusing the existing Qwen 3.8 model cache without copying or downloading it again.'
     return 'qwen38-hf-cache'
   }
@@ -535,13 +601,17 @@ function Get-ModelCacheVolume {
 
 function Ensure-Container {
   $cacheVolume = Get-ModelCacheVolume
-  $existing = & docker ps -a --filter "name=^/$containerName$" --format '{{.Names}}' 2>$null
-  if ($existing) {
-    $installedLabels = (& docker inspect --format '{{json .Config.Labels}}' $containerName 2>$null | Out-String) | ConvertFrom-Json
+  $existingResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('ps', '-a', '--filter', "name=^/$containerName$", '--format', '{{.Names}}')
+  if ($existingResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingResult.StdOut)) {
+    $labelsResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('inspect', '--format', '{{json .Config.Labels}}', $containerName)
+    if ($labelsResult.ExitCode -ne 0) { throw 'Could not inspect the Balto container.' }
+    $installedLabels = $labelsResult.StdOut | ConvertFrom-Json
     $installedConfig = $installedLabels.'com.adore.balto.config'
     if ($installedConfig -eq $containerConfig) {
-      $running = & docker ps --filter "name=^/$containerName$" --format '{{.Names}}' 2>$null
-      if (-not $running) { Invoke-LoggedNative -FilePath 'docker' -Arguments @('start', $containerName) -Prefix 'docker' }
+      $runningResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('ps', '--filter', "name=^/$containerName$", '--format', '{{.Names}}')
+      if ($runningResult.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($runningResult.StdOut)) {
+        Invoke-LoggedNative -FilePath 'docker' -Arguments @('start', $containerName) -Prefix 'docker'
+      }
       return
     }
     Write-Log "Replacing Balto container configuration '$installedConfig' with '$containerConfig'. Model weights remain in the persistent volume."
@@ -602,7 +672,13 @@ function Wait-ForInference {
     if (Test-HttpReady 'http://127.0.0.1:30000/health') { return }
     if ($attempt % 3 -eq 0) {
       $downloadedBytes = 0
-      try { $downloadedBytes = [uint64](& docker exec $containerName sh -lc 'du -sb /root/.cache/huggingface/hub 2>/dev/null | cut -f1' 2>$null) } catch {}
+      try {
+        $downloadResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('exec', $containerName, 'sh', '-lc', 'du -sb /root/.cache/huggingface/hub 2>/dev/null | cut -f1')
+        if ($downloadResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($downloadResult.StdOut)) {
+          $downloadedBytes = [uint64]$downloadResult.StdOut.Trim()
+        }
+      }
+      catch {}
       $sampleTime = Get-Date
       $downloadedGb = [math]::Round($downloadedBytes / 1GB, 1)
       $modelProgress = [math]::Min(1, $downloadedBytes / $expectedModelBytes)
@@ -634,9 +710,10 @@ function Wait-ForInference {
       $lastDownloadedBytes = $downloadedBytes
       $lastSampleTime = $sampleTime
     }
-    $running = & docker inspect -f '{{.State.Running}}' $containerName 2>$null
-    if ($running -ne 'true') {
-      $tail = (& docker logs --tail 25 $containerName 2>&1 | Out-String)
+    $runningResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('inspect', '-f', '{{.State.Running}}', $containerName)
+    if ($runningResult.ExitCode -ne 0 -or $runningResult.StdOut.Trim() -ne 'true') {
+      $logsResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('logs', '--tail', '25', $containerName)
+      $tail = @($logsResult.StdOut, $logsResult.StdErr) -join "`r`n"
       throw "The SGLang container stopped. Recent log:`n$tail"
     }
     Start-Sleep -Seconds 5
