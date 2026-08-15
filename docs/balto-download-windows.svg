@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="112" viewBox="0 0 760 112" role="img" aria-labelledby="title description">
+  <title id="title">Download Balto for Windows</title>
+  <desc id="description">Latest Balto Speedrunner release for one RTX 5090</desc>
+  <defs>
+    <linearGradient id="button" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff7847"/>
+      <stop offset="1" stop-color="#ff5b24"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-30%" width="120%" height="170%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#ff6b35" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect x="10" y="8" width="740" height="88" rx="22" fill="url(#button)" filter="url(#shadow)"/>
+  <path d="M62 34v30m-12-11 12 12 12-12M47 75h30" fill="none" stroke="#111318" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="101" y="51" fill="#111318" font-family="Segoe UI,Arial,sans-serif" font-size="25" font-weight="800">Download Balto for Windows</text>
+  <text x="101" y="75" fill="#3d1e16" font-family="Segoe UI,Arial,sans-serif" font-size="14" font-weight="600">Latest release  •  Windows 11  •  One RTX 5090</text>
+  <path d="m701 45 11 11-11 11" fill="none" stroke="#111318" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
