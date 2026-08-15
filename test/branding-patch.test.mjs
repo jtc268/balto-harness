@@ -55,6 +55,14 @@ test('preview badge is removed from the Balto hero', async () => {
   assert.match(script, /\['@deepseek-ai\/dsh-system-prompt', 'Balto system prompt'\]/)
 })
 
+test('collapsed sidebar uses the Balto dog instead of the upstream whale', async () => {
+  const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
+  assert.match(script, /function brandCollapsedSidebar\(\)/)
+  assert.match(script, /data-balto-collapse-mark/)
+  assert.match(script, /svg\[class\*="_railFish"\]/)
+  assert.match(script, /icon\.src = '\/assets\/balto-mark\.svg'/)
+})
+
 test('live meter is compact and animated', async () => {
   const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
   assert.doesNotMatch(script, /class="balto-brand"/)

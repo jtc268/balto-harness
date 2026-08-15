@@ -78,6 +78,19 @@
     }
   }
 
+  function brandCollapsedSidebar() {
+    for (const toggle of document.querySelectorAll('button[aria-label="Open sidebar"]')) {
+      const whale = toggle.querySelector('svg[class*="_railFish"]')
+      if (!whale || toggle.querySelector('[data-balto-collapse-mark]')) continue
+      const icon = document.createElement('img')
+      icon.src = '/assets/balto-mark.svg'
+      icon.alt = ''
+      icon.setAttribute('aria-hidden', 'true')
+      icon.dataset.baltoCollapseMark = 'true'
+      toggle.insertBefore(icon, whale)
+    }
+  }
+
   function simplifyEffortControls() {
     for (const effort of document.querySelectorAll('[class*="triggerEffort"]')) {
       if ((effort.textContent || '').trim() !== 'Off') continue
@@ -102,6 +115,7 @@
   openFreshSession()
   dismissInternalTestingNotice()
   brandVisibleWorkspace()
+  brandCollapsedSidebar()
   simplifyEffortControls()
 
   const style = document.createElement('style')
@@ -145,6 +159,8 @@
     @keyframes balto-trail { 0%, 100% { transform: scaleX(.45); opacity: .16; } 50% { transform: scaleX(1); opacity: .72; } }
     [data-balto-brand="true"] { width: auto !important; display: inline-flex !important; align-items: center !important; gap: 9px !important; color: #f5f7f8 !important; }
     [data-balto-brand="true"] > img { width: 27px !important; height: 27px !important; flex: 0 0 27px; }
+    button[aria-label="Open sidebar"] > svg[class*="_railFish"] { display: none !important; }
+    button[aria-label="Open sidebar"] > img[data-balto-collapse-mark] { width: 27px !important; height: 27px !important; display: block; flex: 0 0 27px; object-fit: contain; }
     .balto-sidebar-wordmark { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; font-family: Inter, "Segoe UI", sans-serif; }
     .balto-sidebar-name { font-size: 15px; font-weight: 760; letter-spacing: -.3px; }
     .balto-sidebar-label { color: rgba(245,247,248,.48); font-size: 7px; font-weight: 850; letter-spacing: 1.35px; text-transform: uppercase; }
@@ -220,6 +236,7 @@
     }
     dismissInternalTestingNotice()
     brandVisibleWorkspace()
+    brandCollapsedSidebar()
     simplifyEffortControls()
   }).observe(document.body, { childList: true, subtree: true })
 })()
