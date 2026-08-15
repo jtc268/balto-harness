@@ -21,7 +21,8 @@ for (const candidate of deepseekRoots) {
 if (!deepseekRoot) throw new Error('The Balto coding workspace frontend was not found')
 const dist = join(deepseekRoot, 'dsh-web-frontend', 'dist')
 const assets = join(dist, 'assets')
-const scriptTag = '    <script defer src="/assets/balto-ui.js"></script>'
+const scriptTag = '<script defer src="/assets/balto-ui.js"></script>'
+const prepaintStyle = '<style id="balto-prepaint">svg[viewBox="0 0 182 24"]{visibility:hidden!important}</style>'
 
 await copyFile(join(resources, 'assets', 'balto-ui.js'), join(assets, 'balto-ui.js'))
 await copyFile(join(resources, 'assets', 'balto-mark.svg'), join(assets, 'balto-mark.svg'))
@@ -30,7 +31,14 @@ await copyFile(join(resources, 'assets', 'balto-mark.svg'), join(dist, 'favicon.
 const indexPath = join(dist, 'index.html')
 let index = await readFile(indexPath, 'utf8')
 index = index.replaceAll('DeepSeek Harness', 'Balto Speedrunner')
-if (!index.includes('/assets/balto-ui.js')) index = index.replace('</body>', `${scriptTag}\n  </body>`)
+index = index
+  .replace(/\s*<style id="balto-prepaint">[\s\S]*?<\/style>\s*/g, '\n')
+  .replace(/\s*<script defer src="\/assets\/balto-ui\.js"><\/script>\s*/g, '\n')
+const firstModule = '<script type="module"'
+const earlyBranding = `${prepaintStyle}\n    ${scriptTag}\n    ${firstModule}`
+index = index.includes(firstModule)
+  ? index.replace(firstModule, earlyBranding)
+  : index.replace('</head>', `    ${prepaintStyle}\n    ${scriptTag}\n  </head>`)
 await writeFile(indexPath, index)
 
 const manifestPath = join(dist, 'manifest.webmanifest')
@@ -56,6 +64,8 @@ async function patchUserFacingBundles(directory) {
     const patched = original
       .replaceAll('DeepSeek Harness', 'Balto Speedrunner')
       .replaceAll('DeepSeek-Harness', 'Balto Speedrunner')
+      .replaceAll('children:"HARNESS"', 'children:"BALTO"')
+      .replaceAll('children: "HARNESS"', 'children: "BALTO"')
     if (patched !== original) await writeFile(path, patched)
   }
 }
