@@ -735,6 +735,9 @@ function Start-LocalServices {
   Update-State @{ phase = 'starting'; stage = 'launch'; progress = 88; message = 'Starting the Balto gateway and coding workspace.'; etaSeconds = $null }
   $env:PATH = "$nodeRoot;$env:PATH"
   $env:DSH_HOME = $dshHome
+  $env:BALTO_DATA = $BaltoData
+  $env:BALTO_RESOURCES = $Resources
+  $env:BALTO_APP_EXE = $AppExe
   Start-BaltoProcess 'gateway.pid' $nodeExe @((Join-Path $Resources 'gateway.mjs')) 'gateway.mjs'
 
   $dshEntry = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'

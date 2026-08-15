@@ -25,9 +25,20 @@ test('ships the exact one-5090 inference configuration', async () => {
 
 test('remote access remains tailnet-only', async () => {
   const script = await read('runtime/balto.ps1')
+  const gateway = await read('runtime/gateway.mjs')
+  const workspaceUi = await read('runtime/assets/balto-ui.js')
   assert.match(script, /Invoke-LoggedNative -FilePath 'tailscale' -Arguments @\('serve', '--bg', '--yes', '--https=3080', '127\.0\.0\.1:3080'\)/)
   assert.match(script, /Invoke-LoggedNative -FilePath 'tailscale' -Arguments @\('serve', '--bg', '--yes', '--https=30100', '127\.0\.0\.1:30100'\)/)
   assert.doesNotMatch(script, /tailscale funnel/i)
+  assert.match(script, /\$env:BALTO_DATA = \$BaltoData/)
+  assert.match(script, /\$env:BALTO_RESOURCES = \$Resources/)
+  assert.match(gateway, /requestUrl\.pathname === '\/remote'/)
+  assert.match(gateway, /hostname\.endsWith\('\.ts\.net'\)/)
+  assert.match(gateway, /windowsHide: true/)
+  assert.match(workspaceUi, /function mountRemoteSettings\(\)/)
+  assert.match(workspaceUi, />Private web app</)
+  assert.match(workspaceUi, />Copy link</)
+  assert.match(workspaceUi, /changeRemoteStatus\(event\.currentTarget\.checked\)/)
 })
 
 test('release config uses a signed updater and NSIS', async () => {

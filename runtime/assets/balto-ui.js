@@ -3,6 +3,9 @@
   const speedEndpoint = LOCAL_HOSTS.has(location.hostname)
     ? 'http://127.0.0.1:30100/speed'
     : `https://${location.hostname}:30100/speed`
+  const remoteEndpoint = LOCAL_HOSTS.has(location.hostname)
+    ? 'http://127.0.0.1:30100/remote'
+    : `https://${location.hostname}:30100/remote`
 
   document.title = 'Balto Speedrunner'
 
@@ -91,6 +94,128 @@
     }
   }
 
+  let remoteRefreshActive = false
+  let remoteChanging = false
+  let remoteUrl = null
+
+  function renderRemoteStatus(status) {
+    const row = document.querySelector('#balto-remote-settings')
+    if (!row) return
+    const description = row.querySelector('.balto-remote-description')
+    const link = row.querySelector('.balto-remote-link')
+    const copy = row.querySelector('.balto-remote-copy')
+    const toggle = row.querySelector('input')
+    const enabled = Boolean(status.remoteEnabled)
+    toggle.checked = enabled
+    toggle.disabled = remoteChanging || !status.available || !status.tailscaleInstalled || !status.tailscaleSignedIn
+    remoteUrl = enabled ? status.remoteUrl : null
+    if (enabled && remoteUrl) {
+      description.textContent = 'Private access is on'
+      link.href = remoteUrl
+      link.textContent = remoteUrl.replace(/^https:\/\//, '')
+      link.hidden = false
+      copy.hidden = false
+    } else {
+      link.hidden = true
+      copy.hidden = true
+      description.textContent = !status.available
+        ? 'Private access is unavailable'
+        : !status.tailscaleInstalled
+          ? 'Tailscale is required'
+          : !status.tailscaleSignedIn
+            ? 'Sign in to Tailscale to enable'
+            : 'Turn on to get your private link'
+    }
+  }
+
+  async function refreshRemoteStatus() {
+    if (remoteRefreshActive || remoteChanging || !document.querySelector('#balto-remote-settings')) return
+    remoteRefreshActive = true
+    try {
+      const response = await fetch(remoteEndpoint, { cache: 'no-store' })
+      renderRemoteStatus(await response.json())
+    } catch {
+      renderRemoteStatus({ available: false })
+    } finally {
+      remoteRefreshActive = false
+    }
+  }
+
+  async function changeRemoteStatus(enabled) {
+    const row = document.querySelector('#balto-remote-settings')
+    if (!row || remoteChanging) return
+    remoteChanging = true
+    const description = row.querySelector('.balto-remote-description')
+    const toggle = row.querySelector('input')
+    toggle.disabled = true
+    description.textContent = enabled ? 'Turning on private access' : 'Turning off private access'
+    try {
+      const response = await fetch(remoteEndpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      const status = await response.json()
+      if (!response.ok) throw new Error(status.error || 'Private access could not be updated')
+      renderRemoteStatus(status)
+    } catch (error) {
+      description.textContent = error instanceof Error ? error.message : 'Private access could not be updated'
+      toggle.checked = !enabled
+    } finally {
+      remoteChanging = false
+      await refreshRemoteStatus()
+    }
+  }
+
+  async function copyRemoteLink(button) {
+    if (!remoteUrl) return
+    try {
+      await navigator.clipboard.writeText(remoteUrl)
+    } catch {
+      const input = document.createElement('textarea')
+      input.value = remoteUrl
+      input.style.position = 'fixed'
+      input.style.opacity = '0'
+      document.body.append(input)
+      input.select()
+      document.execCommand('copy')
+      input.remove()
+    }
+    button.textContent = 'Copied'
+    setTimeout(() => {
+      if (button.isConnected) button.textContent = 'Copy link'
+    }, 1400)
+  }
+
+  function mountRemoteSettings() {
+    if (document.querySelector('#balto-remote-settings')) return
+    const dialog = [...document.querySelectorAll('[role="dialog"]')].find((candidate) =>
+      candidate.querySelector('button')?.textContent?.trim() === 'General' && /Agent preset/.test(candidate.textContent || ''),
+    )
+    const options = dialog?.querySelector('[class*="_options"]')
+    if (!options) return
+    const row = document.createElement('section')
+    row.id = 'balto-remote-settings'
+    row.innerHTML = `
+      <div class="balto-remote-copy-block">
+        <strong>Private web app</strong>
+        <span class="balto-remote-description">Checking Tailscale</span>
+        <a class="balto-remote-link" href="#" target="_blank" rel="noopener noreferrer" hidden></a>
+      </div>
+      <div class="balto-remote-controls">
+        <button type="button" class="balto-remote-copy" hidden>Copy link</button>
+        <label class="balto-remote-switch">
+          <input type="checkbox" aria-label="Private web app access">
+          <span aria-hidden="true"></span>
+        </label>
+      </div>
+    `
+    row.querySelector('input').addEventListener('change', (event) => void changeRemoteStatus(event.currentTarget.checked))
+    row.querySelector('.balto-remote-copy').addEventListener('click', (event) => void copyRemoteLink(event.currentTarget))
+    options.append(row)
+    void refreshRemoteStatus()
+  }
+
   function simplifyEffortControls() {
     for (const effort of document.querySelectorAll('[class*="triggerEffort"]')) {
       if ((effort.textContent || '').trim() !== 'Off') continue
@@ -116,6 +241,7 @@
   dismissInternalTestingNotice()
   brandVisibleWorkspace()
   brandCollapsedSidebar()
+  mountRemoteSettings()
   simplifyEffortControls()
 
   const style = document.createElement('style')
@@ -161,6 +287,23 @@
     [data-balto-brand="true"] > img { width: 27px !important; height: 27px !important; flex: 0 0 27px; }
     button[aria-label="Open sidebar"] > svg[class*="_railFish"] { display: none !important; }
     button[aria-label="Open sidebar"] > img[data-balto-collapse-mark] { width: 27px !important; height: 27px !important; display: block; flex: 0 0 27px; object-fit: contain; }
+    #balto-remote-settings { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 4px; padding: 22px 0 2px; border-top: 1px solid rgba(255,255,255,.1); font-family: Inter, "Segoe UI", sans-serif; }
+    .balto-remote-copy-block { min-width: 0; display: grid; gap: 5px; }
+    .balto-remote-copy-block strong { color: rgba(255,255,255,.94); font-size: 14px; font-weight: 600; }
+    .balto-remote-description { color: rgba(255,255,255,.53); font-size: 12px; line-height: 1.35; }
+    .balto-remote-link { max-width: 380px; color: #72dba5; font-size: 12px; line-height: 1.35; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .balto-remote-link:hover { text-decoration: underline; }
+    .balto-remote-controls { display: flex; align-items: center; gap: 11px; }
+    .balto-remote-copy { height: 30px; padding: 0 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 15px; color: rgba(255,255,255,.82); background: rgba(255,255,255,.05); cursor: pointer; font: 500 12px/1 Inter, "Segoe UI", sans-serif; white-space: nowrap; }
+    .balto-remote-copy:hover { background: rgba(255,255,255,.09); }
+    .balto-remote-switch { position: relative; width: 42px; height: 24px; flex: 0 0 42px; }
+    .balto-remote-switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .balto-remote-switch span { position: absolute; inset: 0; border-radius: 999px; background: rgba(255,255,255,.14); cursor: pointer; transition: background .18s ease; }
+    .balto-remote-switch span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #b9c0c8; box-shadow: 0 1px 4px rgba(0,0,0,.35); transition: transform .18s ease, background .18s ease; }
+    .balto-remote-switch input:checked + span { background: #39c989; }
+    .balto-remote-switch input:checked + span::after { transform: translateX(18px); background: #fff; }
+    .balto-remote-switch input:disabled + span { cursor: not-allowed; opacity: .46; }
+    .balto-remote-switch input:focus-visible + span { outline: 2px solid #6da5ff; outline-offset: 2px; }
     .balto-sidebar-wordmark { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; font-family: Inter, "Segoe UI", sans-serif; }
     .balto-sidebar-name { font-size: 15px; font-weight: 760; letter-spacing: -.3px; }
     .balto-sidebar-label { color: rgba(245,247,248,.48); font-size: 7px; font-weight: 850; letter-spacing: 1.35px; text-transform: uppercase; }
@@ -237,6 +380,9 @@
     dismissInternalTestingNotice()
     brandVisibleWorkspace()
     brandCollapsedSidebar()
+    mountRemoteSettings()
     simplifyEffortControls()
   }).observe(document.body, { childList: true, subtree: true })
+
+  setInterval(() => void refreshRemoteStatus(), 4000)
 })()

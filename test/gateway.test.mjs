@@ -2,9 +2,11 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import http from 'node:http'
 import { once } from 'node:events'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 async function listen(server) {
   server.listen(0, '127.0.0.1')
@@ -141,4 +143,40 @@ test('gateway survives an interrupted upstream stream and remains healthy', asyn
   const telemetry = await fetch(`http://127.0.0.1:${gatewayPort}/speed`).then((item) => item.json())
   assert.equal(telemetry.state, 'error')
   assert.match(telemetry.error, /terminated|reset|socket|closed/i)
+})
+
+test('gateway exposes private access status only to Balto origins', async (context) => {
+  const stateRoot = await mkdtemp(join(tmpdir(), 'balto-remote-'))
+  context.after(() => rm(stateRoot, { recursive: true, force: true }))
+  await writeFile(join(stateRoot, 'state.json'), JSON.stringify({
+    tailscaleInstalled: true,
+    tailscaleSignedIn: true,
+    tailscaleDnsName: 'tower.example.ts.net',
+    remoteEnabled: true,
+    remoteUrl: 'https://tower.example.ts.net:3080',
+  }))
+
+  const portProbe = http.createServer()
+  const gatewayPort = await listen(portProbe)
+  await new Promise((resolve) => portProbe.close(resolve))
+  const child = spawn(process.execPath, [fileURLToPath(new URL('../runtime/gateway.mjs', import.meta.url))], {
+    env: { ...process.env, BALTO_GATEWAY_PORT: String(gatewayPort), BALTO_DATA: stateRoot },
+    stdio: 'ignore',
+  })
+  context.after(() => child.kill())
+  await waitFor(`http://127.0.0.1:${gatewayPort}/remote`)
+
+  const allowed = await fetch(`http://127.0.0.1:${gatewayPort}/remote`, {
+    headers: { origin: 'http://127.0.0.1:3080' },
+  })
+  assert.equal(allowed.status, 200)
+  assert.equal(allowed.headers.get('access-control-allow-origin'), 'http://127.0.0.1:3080')
+  const status = await allowed.json()
+  assert.equal(status.remoteEnabled, true)
+  assert.equal(status.remoteUrl, 'https://tower.example.ts.net:3080')
+
+  const rejected = await fetch(`http://127.0.0.1:${gatewayPort}/remote`, {
+    headers: { origin: 'https://example.com' },
+  })
+  assert.equal(rejected.status, 403)
 })
