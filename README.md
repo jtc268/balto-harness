@@ -2,12 +2,6 @@
   <img src="docs/balto-github-hero.svg" width="100%" alt="Balto. Double your inference speed with Qwen 3.8 27B on one RTX 5090." />
 </p>
 
-<h1 align="center">Double your inference speed with Qwen 3.8 27B</h1>
-
-<p align="center">
-  <strong>One RTX 5090. One clean Windows install. A local coding agent that moves.</strong>
-</p>
-
 <p align="center">
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows-11-70d8ff?style=flat-square&logo=windows11&logoColor=white" />
   <img alt="NVIDIA RTX 5090" src="https://img.shields.io/badge/NVIDIA-RTX%205090-76B900?style=flat-square&logo=nvidia&logoColor=white" />
