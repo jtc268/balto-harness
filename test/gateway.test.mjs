@@ -66,12 +66,23 @@ test('gateway applies safe sampling and reports exact streaming speed', async (c
   const response = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ model: 'anything', stream: true, messages: [{ role: 'user', content: 'test' }] }),
+    body: JSON.stringify({
+      model: 'anything',
+      stream: true,
+      max_completion_tokens: 4096,
+      messages: [
+        { role: 'developer', content: 'You are Balto.' },
+        { role: 'user', content: 'test' },
+      ],
+    }),
   })
   assert.equal(response.status, 200)
   await response.text()
 
   assert.equal(received.model, 'qwen3.8-27b-nvfp4-dspark')
+  assert.equal(received.messages[0].role, 'system')
+  assert.equal(received.max_tokens, 4096)
+  assert.equal('max_completion_tokens' in received, false)
   assert.equal(received.temperature, 0.6)
   assert.equal(received.top_p, 0.95)
   assert.equal(received.top_k, 20)

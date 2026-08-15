@@ -44,4 +44,5 @@ test('preview badge is vertically centered in the Balto hero', async () => {
   assert.match(script, /align-self: center !important/)
   assert.match(script, /align-items: center !important/)
   assert.match(script, /margin-top: 0 !important/)
+  assert.match(script, /\['@deepseek-ai\/dsh-system-prompt', 'Balto system prompt'\]/)
 })

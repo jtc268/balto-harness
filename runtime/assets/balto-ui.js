@@ -190,6 +190,7 @@
   const replacements = new Map([
     ['DeepSeek Harness', 'Balto Speedrunner'],
     ['DeepSeek-Harness', 'Balto Speedrunner'],
+    ['@deepseek-ai/dsh-system-prompt', 'Balto system prompt'],
   ])
   function replaceText(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
