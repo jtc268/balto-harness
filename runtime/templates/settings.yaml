@@ -18,6 +18,7 @@ llm-pi-ai:
       defaultMaxTokens: 32768
       defaultInput:
         - text
+        - image
       retryPolicy:
         mode: normal
         maxRetries: 5
@@ -38,9 +39,13 @@ llm-pi-ai:
           maxTokens: 32768
           input:
             - text
+            - image
           reasoningEfforts:
             off: none
             high: high
           compat:
             thinkingFormat: deepseek
             supportsReasoningEffort: false
+
+agent-presets:
+  default: standard

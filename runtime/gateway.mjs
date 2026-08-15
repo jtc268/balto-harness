@@ -11,6 +11,9 @@ const servedModel = 'qwen3.8-27b-nvfp4-dspark'
 const baltoData = process.env.BALTO_DATA || ''
 const baltoResources = process.env.BALTO_RESOURCES || ''
 const baltoAppExe = process.env.BALTO_APP_EXE || ''
+const contextWindow = Number(process.env.BALTO_CONTEXT_WINDOW || 80000)
+const maxStepOutputTokens = Number(process.env.BALTO_MAX_STEP_OUTPUT_TOKENS || 32768)
+const contextSafetyTokens = Number(process.env.BALTO_CONTEXT_SAFETY_TOKENS || 4096)
 const remoteStatePath = baltoData ? join(baltoData, 'state.json') : ''
 let remoteAction = null
 
@@ -20,6 +23,8 @@ const speed = {
   completionTokens: 0,
   elapsedSeconds: 0,
   error: null,
+  maintenance: null,
+  lastMaintenance: null,
   updatedAt: new Date().toISOString(),
 }
 
@@ -129,24 +134,62 @@ async function readBody(request) {
   return Buffer.concat(chunks)
 }
 
+function contentText(value) {
+  if (typeof value === 'string') return value.startsWith('data:image/') ? '[image]' : value
+  if (Array.isArray(value)) return value.map(contentText).join('\n')
+  if (!value || typeof value !== 'object') return ''
+  if (value.type === 'image' || value.type === 'image_url' || value.image_url) return '[image]'.repeat(1024)
+  return Object.entries(value)
+    .filter(([key]) => key !== 'image_url' && key !== 'url')
+    .map(([, item]) => contentText(item))
+    .join('\n')
+}
+
+function estimatePromptTokens(body) {
+  const messageChars = contentText(body.messages || []).length
+  const toolChars = contentText(body.tools || []).length
+  return Math.ceil((messageChars + toolChars) / 2.5) + (body.messages?.length || 0) * 8 + 256
+}
+
+function requestPurpose(body) {
+  const tail = contentText((body.messages || []).slice(-3)).toLowerCase()
+  return tail.includes('acting as a compaction engine') ? 'compaction' : 'foreground'
+}
+
 function tuneRequest(buffer, path) {
-  if (!path.endsWith('/chat/completions')) return buffer
+  if (!path.endsWith('/chat/completions')) {
+    return { buffer, purpose: 'foreground', estimatedPromptTokens: 0, maxTokens: 0 }
+  }
   const body = JSON.parse(buffer.toString('utf8'))
   body.model = servedModel
   body.messages = body.messages?.map((message) =>
     message?.role === 'developer' ? { ...message, role: 'system' } : message,
   )
+  const purpose = requestPurpose(body)
   body.temperature ??= 0.6
   body.top_p ??= 0.95
   body.top_k ??= 20
   body.seed ??= 0
-  const requestedMaxTokens = Number(body.max_tokens ?? body.max_completion_tokens ?? 32768)
-  body.max_tokens = Math.min(requestedMaxTokens, 32768)
+  if (purpose === 'compaction') {
+    body.temperature = 0
+    body.top_p = 1
+    body.chat_template_kwargs = { ...(body.chat_template_kwargs || {}), enable_thinking: false }
+  }
+  const requested = Number(body.max_tokens ?? body.max_completion_tokens ?? maxStepOutputTokens)
+  const requestedMaxTokens = Number.isFinite(requested) && requested > 0 ? requested : maxStepOutputTokens
+  const estimatedPromptTokens = estimatePromptTokens(body)
+  const availableOutputTokens = Math.max(1, contextWindow - estimatedPromptTokens - contextSafetyTokens)
+  body.max_tokens = Math.max(1, Math.min(requestedMaxTokens, maxStepOutputTokens, availableOutputTokens))
   delete body.max_completion_tokens
   if (body.stream) {
     body.stream_options = { ...(body.stream_options || {}), include_usage: true, continuous_usage_stats: true }
   }
-  return Buffer.from(JSON.stringify(body))
+  return {
+    buffer: Buffer.from(JSON.stringify(body)),
+    purpose,
+    estimatedPromptTokens,
+    maxTokens: body.max_tokens,
+  }
 }
 
 function updateSpeedFromEvent(line, requestState) {
@@ -162,11 +205,12 @@ function updateSpeedFromEvent(line, requestState) {
     const elapsedSeconds = Math.max((now - requestState.firstTokenAt) / 1000, 0.001)
     if (completionTokens < 4 || elapsedSeconds < 0.02) return
     const measuredTokens = Math.max(completionTokens - 1, 1)
-    speed.state = 'live'
-    speed.completionTokens = completionTokens
-    speed.elapsedSeconds = elapsedSeconds
-    speed.tokensPerSecond = measuredTokens / elapsedSeconds
-    speed.updatedAt = new Date().toISOString()
+    const telemetry = requestState.telemetry
+    telemetry.state = 'live'
+    telemetry.completionTokens = completionTokens
+    telemetry.elapsedSeconds = elapsedSeconds
+    telemetry.tokensPerSecond = measuredTokens / elapsedSeconds
+    telemetry.updatedAt = new Date().toISOString()
   } catch {
     // Non-JSON SSE lines are passed through untouched.
   }
@@ -180,8 +224,13 @@ async function proxy(request, response) {
   }
   response.once('close', abortUpstream)
   let body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await readBody(request)
+  let requestMetadata = { purpose: 'foreground', estimatedPromptTokens: 0, maxTokens: 0 }
   try {
-    if (body?.length) body = tuneRequest(body, target.pathname)
+    if (body?.length) {
+      const tuned = tuneRequest(body, target.pathname)
+      body = tuned.buffer
+      requestMetadata = tuned
+    }
   } catch (error) {
     response.off('close', abortUpstream)
     json(response, 400, { error: { message: `Invalid JSON request: ${error.message}` } })
@@ -244,13 +293,22 @@ async function proxy(request, response) {
     return
   }
 
-  speed.state = 'starting'
-  speed.tokensPerSecond = 0
-  speed.completionTokens = 0
-  speed.elapsedSeconds = 0
-  speed.error = null
+  const isMaintenance = requestMetadata.purpose === 'compaction'
+  const initialTelemetry = {
+    state: isMaintenance ? 'compacting' : 'starting',
+    tokensPerSecond: 0,
+    completionTokens: 0,
+    elapsedSeconds: 0,
+    error: null,
+    estimatedPromptTokens: requestMetadata.estimatedPromptTokens,
+    maxTokens: requestMetadata.maxTokens,
+    updatedAt: new Date().toISOString(),
+  }
+  if (isMaintenance) speed.maintenance = initialTelemetry
+  else Object.assign(speed, initialTelemetry)
+  const telemetry = isMaintenance ? speed.maintenance : speed
   speed.updatedAt = new Date().toISOString()
-  const requestState = { firstTokenAt: 0, pending: '' }
+  const requestState = { firstTokenAt: 0, pending: '', telemetry }
   const reader = upstreamResponse.body.getReader()
   let streamError = null
   try {
@@ -268,17 +326,22 @@ async function proxy(request, response) {
     streamError = error
     if (!upstreamAbort.signal.aborted) {
       const detail = error.cause?.message || error.message
-      speed.state = 'error'
-      speed.error = detail
-      speed.updatedAt = new Date().toISOString()
+      telemetry.state = 'error'
+      telemetry.error = detail
+      telemetry.updatedAt = new Date().toISOString()
       console.error(`Balto upstream stream interrupted: ${detail}`)
     }
   } finally {
     response.off('close', abortUpstream)
     reader.releaseLock()
     if (!streamError) {
-      speed.state = 'complete'
-      speed.error = null
+      telemetry.state = 'complete'
+      telemetry.error = null
+    }
+    telemetry.updatedAt = new Date().toISOString()
+    if (isMaintenance) {
+      speed.lastMaintenance = { ...telemetry }
+      speed.maintenance = null
     }
     speed.updatedAt = new Date().toISOString()
     if (!response.writableEnded && !response.destroyed) response.end()
@@ -338,7 +401,7 @@ async function handleRequest(request, response) {
   }
   if (request.url === '/health') {
     try {
-      const check = await fetch(new URL('/health', upstream), { signal: AbortSignal.timeout(1500) })
+      const check = await fetch(new URL('/v1/models', upstream), { signal: AbortSignal.timeout(1500) })
       json(response, check.ok ? 200 : 503, { ok: check.ok, upstream: upstream.toString() })
     } catch (error) {
       json(response, 503, { ok: false, error: error.message })

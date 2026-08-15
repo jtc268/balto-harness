@@ -256,6 +256,24 @@ function render(status) {
   const failed = status.phase === 'failed'
   const recovering = failed && canRecoverAutomatically(status) && setupRecoveryAttempts < MAX_SETUP_RECOVERY_ATTEMPTS
 
+  if (ready && invoke) {
+    if (!workspaceOpened) {
+      workspaceOpened = true
+      const fresh = freshWorkspaceRequested
+      freshWorkspaceRequested = false
+      invoke('open_workspace', { fresh }).catch((error) => {
+        workspaceOpened = false
+        document.body.classList.remove('launch-pending')
+        elements.phaseMessage.textContent = withoutTrailingPeriod(error)
+        elements.status.classList.add('error')
+        elements.status.querySelector('span').textContent = 'Workspace unavailable'
+      })
+    }
+    return
+  }
+
+  document.body.classList.remove('launch-pending')
+
   elements.progress.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
   elements.progressValue.textContent = `${progress}%`
   elements.phaseMessage.textContent = withoutTrailingPeriod(status.message || 'Waiting for Balto')
@@ -317,7 +335,7 @@ function render(status) {
   elements.remoteToggle.checked = Boolean(status.remoteEnabled)
   elements.remoteToggle.disabled = !ready || !status.tailscaleInstalled || !status.tailscaleSignedIn || busy || remoteChanging
   if (status.remoteEnabled && status.remoteUrl) {
-    elements.remoteDescription.textContent = 'Your private web app is ready'
+    elements.remoteDescription.textContent = 'Ready on your tailnet'
     elements.remoteUrl.hidden = false
     elements.remoteUrl.textContent = status.remoteUrl
     elements.remoteUrl.href = status.remoteUrl
@@ -326,16 +344,10 @@ function render(status) {
     elements.remoteDescription.textContent = !ready
       ? 'Available after Balto starts'
       : status.tailscaleSignedIn
-        ? 'Turn on to get your private web app link'
-        : 'Sign in to Tailscale to get your private web app link'
+        ? 'Turn on to create your remote control link'
+        : 'Sign this computer into the same tailnet as your remote device'
   }
 
-  if (ready && !workspaceOpened && invoke) {
-    workspaceOpened = true
-    const fresh = freshWorkspaceRequested
-    freshWorkspaceRequested = false
-    setTimeout(() => invoke('open_workspace', { fresh }).catch(() => { workspaceOpened = false }), 650)
-  }
 }
 
 function canRecoverAutomatically(status) {
@@ -369,6 +381,7 @@ async function refresh() {
       scheduleAutomaticRecovery(status)
     }
   } catch (error) {
+    document.body.classList.remove('launch-pending')
     elements.phaseMessage.textContent = String(error)
     elements.status.classList.add('error')
     elements.status.querySelector('span').textContent = 'Status unavailable'

@@ -40,7 +40,7 @@ $nodeExe = Join-Path $nodeRoot 'node.exe'
 $npmCli = Join-Path $nodeRoot 'node_modules\npm\bin\npm-cli.js'
 $containerName = 'balto-qwen38'
 $containerImage = 'lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1'
-$containerConfig = 'qwen38-nvfp4-dspark-80k-v1'
+$containerConfig = 'qwen38-nvfp4-dspark-80k-v7'
 $modelName = 'RadixArk/Qwen3.8-27B-NVFP4'
 $draftName = 'RadixArk/Qwen3.8-27B-DSpark'
 
@@ -327,7 +327,7 @@ function Refresh-Status([switch]$PreservePhase) {
     }
     catch {}
   }
-  $inferenceReady = $baltoContainerRunning -and (Test-HttpReady 'http://127.0.0.1:30000/health')
+  $inferenceReady = $baltoContainerRunning -and (Test-HttpReady 'http://127.0.0.1:30000/v1/models')
   $gatewayReady = (Test-BaltoProcess 'gateway.pid' 'gateway.mjs') -and (Test-TcpPort 30100)
   $workspaceReady = $gatewayReady -and (Test-BaltoProcess 'workspace.pid' 'dsh\lib\bin.js') -and (Test-TcpPort 3080)
   $warning = $null
@@ -650,13 +650,13 @@ function Ensure-Container {
     '--served-model-name', 'qwen3.8-27b-nvfp4-dspark',
     '--context-length', '80000',
     '--mem-fraction-static', '0.95',
-    '--kv-cache-dtype', 'fp8_e4m3',
     '--attention-backend', 'flashinfer',
     '--chunked-prefill-size', '2048',
     '--mm-feature-transport', 'cpu',
     '--max-running-requests', '1',
     '--max-total-tokens', '80000',
     '--disable-radix-cache',
+    '--random-seed', '447402790',
     '--cuda-graph-max-bs-decode', '1',
     '--cuda-graph-bs-decode', '1',
     '--disable-prefill-cuda-graph',
@@ -664,8 +664,7 @@ function Ensure-Container {
     '--tool-call-parser', 'qwen3_coder',
     '--speculative-algorithm', 'DSPARK',
     '--speculative-draft-model-path', $draftName,
-    '--speculative-dspark-block-size', '7',
-    '--speculative-draft-model-quantization', 'unquant',
+    '--speculative-draft-model-quantization', 'fp8',
     '--mamba-ssm-dtype', 'bfloat16',
     '--max-mamba-cache-size', '1',
     '--host', '0.0.0.0',
@@ -678,8 +677,10 @@ function Wait-ForInference {
   $lastDownloadedBytes = $null
   $lastSampleTime = Get-Date
   $expectedModelBytes = 24GB
-  for ($attempt = 0; $attempt -lt 240; $attempt++) {
-    if (Test-HttpReady 'http://127.0.0.1:30000/health') { return }
+  # A cold 24 GB model download can take well over 20 minutes on a healthy
+  # residential connection. Keep reporting progress for up to four hours.
+  for ($attempt = 0; $attempt -lt 2880; $attempt++) {
+    if (Test-HttpReady 'http://127.0.0.1:30000/v1/models') { return }
     if ($attempt % 3 -eq 0) {
       $downloadedBytes = 0
       try {
@@ -728,7 +729,7 @@ function Wait-ForInference {
     }
     Start-Sleep -Seconds 5
   }
-  throw 'The model did not become ready within 20 minutes. Balto preserved all downloaded data for retry.'
+  throw 'The model did not become ready within four hours. Balto preserved all downloaded data for retry.'
 }
 
 function Start-LocalServices {

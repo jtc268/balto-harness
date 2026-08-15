@@ -1,4 +1,4 @@
-name: Signed Windows release
+name: Windows release
 
 on:
   push:
@@ -25,10 +25,33 @@ jobs:
       - name: Check source
         run: npm run check && npm test
 
+      - name: Detect Windows signing credentials
+        id: windows-signing
+        shell: pwsh
+        env:
+          AZURE_ARTIFACT_SIGNING_ENDPOINT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ENDPOINT }}
+          AZURE_ARTIFACT_SIGNING_ACCOUNT: ${{ secrets.AZURE_ARTIFACT_SIGNING_ACCOUNT }}
+          AZURE_ARTIFACT_SIGNING_PROFILE: ${{ secrets.AZURE_ARTIFACT_SIGNING_PROFILE }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          $required = @(
+            $env:AZURE_ARTIFACT_SIGNING_ENDPOINT,
+            $env:AZURE_ARTIFACT_SIGNING_ACCOUNT,
+            $env:AZURE_ARTIFACT_SIGNING_PROFILE,
+            $env:AZURE_CLIENT_ID,
+            $env:AZURE_CLIENT_SECRET,
+            $env:AZURE_TENANT_ID
+          )
+          "configured=$([bool](-not ($required -contains '')))".ToLowerInvariant() >> $env:GITHUB_OUTPUT
+
       - name: Install Azure Artifact Signing client
+        if: steps.windows-signing.outputs.configured == 'true'
         run: cargo install artifact-signing-cli --locked
 
       - name: Build, sign, and draft the release
+        if: steps.windows-signing.outputs.configured == 'true'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -50,3 +73,23 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: --bundles nsis --config src-tauri/tauri.windows-signing.conf.json
+
+      - name: Build and draft the release
+        if: steps.windows-signing.outputs.configured != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Balto Speedrunner v__VERSION__
+          releaseBody: |
+            Windows installer for RTX 5090 owners.
+
+            The first launch downloads Docker components, the pinned SGLang image, Qwen 3.8 27B NVFP4, and its DSpark draft model.
+
+            This early build uses a cryptographically signed Balto updater but does not yet carry an Authenticode publisher signature. Windows may show an unrecognized app warning on first install.
+          releaseDraft: true
+          prerelease: false
+          args: --bundles nsis

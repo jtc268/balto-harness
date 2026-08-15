@@ -17,7 +17,7 @@
         model: qwen3.8-27b-nvfp4-dspark
         thresholdRatio: 0.45
         retainTokens: 12000
-        maxTokens: 4096
+        maxTokens: 1536
         compactionRetries: 2
         maxOverflowRetries: 3
 

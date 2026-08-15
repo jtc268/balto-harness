@@ -19,6 +19,8 @@ try {
 settings ||= {}
 settings['agent-default-model'] ||= template['agent-default-model']
 settings.permission ||= template.permission
+settings['agent-presets'] ||= {}
+settings['agent-presets'].default = template['agent-presets'].default
 settings['llm-pi-ai'] ||= {}
 settings['llm-pi-ai'].providers ||= {}
 

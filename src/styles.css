@@ -28,6 +28,8 @@ body {
   overflow-x: hidden;
 }
 
+body.launch-pending > * { visibility: hidden; }
+
 button, input { font: inherit; }
 button { color: inherit; }
 
