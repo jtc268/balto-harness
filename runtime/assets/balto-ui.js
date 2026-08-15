@@ -111,12 +111,12 @@
       position: fixed;
       z-index: 2147483646;
       top: 8px;
-      right: 142px;
-      height: 50px;
+      right: 18px;
+      height: 48px;
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 0 14px 0 10px;
+      gap: 8px;
+      padding: 0 13px 0 9px;
       border: 1px solid rgba(255,255,255,.09);
       border-radius: 15px;
       background: linear-gradient(145deg, rgba(35,39,45,.94), rgba(18,20,24,.95));
@@ -126,13 +126,23 @@
       font-family: Inter, "Segoe UI", sans-serif;
       user-select: none;
     }
-    #balto-live-bar img { width: 31px; height: 31px; }
-    #balto-live-bar .balto-brand { display: flex; align-items: center; gap: 8px; padding-right: 12px; border-right: 1px solid rgba(255,255,255,.08); }
-    #balto-live-bar .balto-name { font-size: 12px; font-weight: 760; letter-spacing: -.2px; }
-    #balto-live-bar .balto-meter { min-width: 111px; display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
+    #balto-live-bar .balto-sprinter { width: 35px; height: 30px; position: relative; display: grid; place-items: center; overflow: visible; }
+    #balto-live-bar .balto-sprinter img { position: relative; z-index: 1; width: 29px; height: 29px; transform-origin: 50% 72%; animation: balto-sprint 1.15s ease-in-out infinite; }
+    #balto-live-bar .balto-sprinter::before,
+    #balto-live-bar .balto-sprinter::after { content: ""; position: absolute; right: 26px; height: 2px; border-radius: 2px; background: var(--balto-speed); opacity: .28; transform-origin: right center; animation: balto-trail 1.15s ease-in-out infinite; }
+    #balto-live-bar .balto-sprinter::before { top: 10px; width: 13px; }
+    #balto-live-bar .balto-sprinter::after { top: 19px; width: 9px; animation-delay: -.18s; }
+    #balto-live-bar[data-state="live"] .balto-sprinter img { animation-duration: .42s; }
+    #balto-live-bar[data-state="live"] .balto-sprinter::before,
+    #balto-live-bar[data-state="live"] .balto-sprinter::after { opacity: .7; animation-duration: .42s; }
+    #balto-live-bar[data-state="idle"] .balto-sprinter::before,
+    #balto-live-bar[data-state="idle"] .balto-sprinter::after { opacity: .12; }
+    #balto-live-bar .balto-meter { min-width: 96px; display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; }
     #balto-live-bar .balto-value { color: var(--balto-speed); font: 650 26px/1 "Cascadia Code", Consolas, monospace; letter-spacing: -1.6px; font-variant-numeric: tabular-nums; text-shadow: 0 0 18px color-mix(in srgb, var(--balto-speed) 18%, transparent); }
     #balto-live-bar .balto-unit { color: rgba(245,247,248,.58); font-size: 8px; font-weight: 800; letter-spacing: 1px; }
     #balto-live-bar[data-state="idle"] .balto-value { color: #707780; text-shadow: none; }
+    @keyframes balto-sprint { 0%, 100% { transform: translateY(1px) rotate(-1deg); } 50% { transform: translateY(-2px) rotate(1deg); } }
+    @keyframes balto-trail { 0%, 100% { transform: scaleX(.45); opacity: .16; } 50% { transform: scaleX(1); opacity: .72; } }
     [data-balto-brand="true"] { width: auto !important; display: inline-flex !important; align-items: center !important; gap: 9px !important; color: #f5f7f8 !important; }
     [data-balto-brand="true"] > img { width: 27px !important; height: 27px !important; flex: 0 0 27px; }
     .balto-sidebar-wordmark { display: flex; align-items: baseline; gap: 7px; white-space: nowrap; font-family: Inter, "Segoe UI", sans-serif; }
@@ -149,7 +159,11 @@
       padding-top: 0 !important;
       padding-bottom: 0 !important;
     }
-    @media (max-width: 900px) { #balto-live-bar .balto-brand { display: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      #balto-live-bar .balto-sprinter img,
+      #balto-live-bar .balto-sprinter::before,
+      #balto-live-bar .balto-sprinter::after { animation: none !important; }
+    }
   `
   document.head.append(style)
 
@@ -157,10 +171,22 @@
   bar.id = 'balto-live-bar'
   bar.dataset.state = 'idle'
   bar.innerHTML = `
-    <div class="balto-brand"><img src="/assets/balto-mark.svg" alt=""><span class="balto-name">Balto</span></div>
+    <div class="balto-sprinter" aria-hidden="true"><img src="/assets/balto-mark.svg" alt=""></div>
     <div class="balto-meter"><span class="balto-value">0</span><span class="balto-unit">TOK/S</span></div>
   `
   document.body.append(bar)
+
+  function positionSpeedBar() {
+    const exportButton = [...document.querySelectorAll('button')].find((candidate) =>
+      /^Session log\b/i.test((candidate.textContent || '').trim()),
+    )
+    const right = exportButton
+      ? Math.max(window.innerWidth - exportButton.getBoundingClientRect().left + 12, 18)
+      : 18
+    bar.style.right = `${right}px`
+  }
+  positionSpeedBar()
+  window.addEventListener('resize', positionSpeedBar)
 
   const value = bar.querySelector('.balto-value')
   let shown = 0
@@ -212,5 +238,6 @@
     dismissInternalTestingNotice()
     brandVisibleWorkspace()
     simplifyEffortControls()
+    requestAnimationFrame(positionSpeedBar)
   }).observe(document.body, { childList: true, subtree: true })
 })()

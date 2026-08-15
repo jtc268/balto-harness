@@ -46,3 +46,16 @@ test('preview badge is vertically centered in the Balto hero', async () => {
   assert.match(script, /margin-top: 0 !important/)
   assert.match(script, /\['@deepseek-ai\/dsh-system-prompt', 'Balto system prompt'\]/)
 })
+
+test('live meter is compact, animated, and positioned beside session export', async () => {
+  const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
+  assert.doesNotMatch(script, /class="balto-brand"/)
+  assert.doesNotMatch(script, /class="balto-name">Balto/)
+  assert.match(script, /class="balto-sprinter"/)
+  assert.match(script, /@keyframes balto-sprint/)
+  assert.match(script, /@keyframes balto-trail/)
+  assert.match(script, /prefers-reduced-motion: reduce/)
+  assert.match(script, /function positionSpeedBar\(\)/)
+  assert.match(script, /\^Session log\\b/)
+  assert.match(script, /getBoundingClientRect\(\)\.left \+ 12/)
+})

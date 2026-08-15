@@ -9,7 +9,7 @@ permission:
 llm-pi-ai:
   providers:
     sglang:
-      displayName: Balto Local
+      displayName: Balto Qwen
       api: openai-completions
       baseURL: http://127.0.0.1:30100/v1
       headers:
@@ -20,7 +20,7 @@ llm-pi-ai:
         - text
       models:
         - id: qwen3.8-27b-nvfp4-dspark
-          name: Qwen 3.8 27B NVFP4 + DSpark
+          name: Balto Qwen 3.8 27B
           contextWindow: 80000
           maxTokens: 32768
           input:
