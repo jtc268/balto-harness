@@ -1,0 +1,4 @@
+# Balto starts with one ready local model. Other providers remain available
+# through Add Model, but the upstream official route is not preloaded.
+- id: llm-deepseek
+  disabled: true

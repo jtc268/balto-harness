@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('status', 'setup', 'start', 'stop', 'remote-on', 'remote-off')]
+  [ValidateSet('status', 'setup', 'start', 'stop', 'restart-workspace', 'remote-on', 'remote-off')]
   [string]$Action,
   [Parameter(Mandatory = $true)]
   [string]$BaltoData,
@@ -535,7 +535,11 @@ function Ensure-WorkspaceRuntime {
     throw 'Balto could not finish the coding workspace. Your downloaded files are safe and setup will resume automatically.'
   }
   Invoke-LoggedNative -FilePath $nodeExe -Arguments @((Join-Path $Resources 'patch-dsh.mjs'), $dshRoot, $Resources) -Prefix 'brand'
-  Copy-Item -LiteralPath (Join-Path $Resources 'templates\settings.yaml') -Destination (Join-Path $dshHome 'settings.yaml') -Force
+  $settingsPath = Join-Path $dshHome 'settings.yaml'
+  if (-not (Test-Path -LiteralPath $settingsPath)) {
+    Copy-Item -LiteralPath (Join-Path $Resources 'templates\settings.yaml') -Destination $settingsPath
+    Write-Log 'Created the Balto Qwen model profile.'
+  }
   Ensure-DefaultWorkspace
 }
 
@@ -728,7 +732,8 @@ function Start-LocalServices {
   Start-BaltoProcess 'gateway.pid' $nodeExe @((Join-Path $Resources 'gateway.mjs')) 'gateway.mjs'
 
   $dshEntry = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'
-  $arguments = @($dshEntry, 'web', '--host', '127.0.0.1', '--port', '3080')
+  $profilePatch = Join-Path $Resources 'templates\profile.patch.yml'
+  $arguments = @($dshEntry, '--profile', 'web', '--patch', $profilePatch, '--host', '127.0.0.1', '--port', '3080')
   $tailscale = Get-TailscaleInfo
   if ($tailscale.signedIn -and $tailscale.dnsName) {
     $arguments += @('--trusted-host', "$($tailscale.dnsName):3080")
@@ -831,6 +836,14 @@ try {
       Stop-BaltoProcess 'gateway.pid' 'gateway.mjs'
       if (Get-Command docker -ErrorAction SilentlyContinue) { Invoke-LoggedNative -FilePath 'docker' -Arguments @('stop', $containerName) -Prefix 'docker' -AllowFailure }
       Update-State @{ phase = 'stopped'; stage = 'launch'; progress = 0; message = 'Balto is stopped. Model files remain cached.'; inferenceReady = $false; workspaceReady = $false }
+    }
+    'restart-workspace' {
+      Stop-BaltoProcess 'workspace.pid' 'dsh\lib\bin.js'
+      Ensure-NodeRuntime
+      Ensure-WorkspaceRuntime
+      Start-LocalServices
+      Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Balto is ready.'; etaSeconds = 0 }
+      Refresh-Status | Out-Null
     }
     'remote-on' { Enable-Remote }
     'remote-off' { Disable-Remote }

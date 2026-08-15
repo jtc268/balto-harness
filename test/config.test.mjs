@@ -98,6 +98,7 @@ test('first launch sets itself up and opens the familiar workspace', async () =>
   assert.match(setup, /function Test-HttpReady/)
   assert.match(setup, /\$gatewayReady = \(Test-BaltoProcess 'gateway\.pid' 'gateway\.mjs'\)/)
   assert.match(setup, /'--balto-launch-hidden'/)
+  assert.match(setup, /'restart-workspace'/)
   assert.match(setup, /Invoke-HiddenNativeNoOutput -FilePath \$AppExe -Arguments \$launcherArguments/)
   assert.match(setup, /http:\/\/127\.0\.0\.1:30000\/health/)
   assert.match(setup, /js-yaml@4\.2\.0/)
@@ -171,4 +172,17 @@ test('never opens Windows console windows for Balto services', async () => {
   for (const line of setup.split(/\r?\n/).filter((value) => value.includes('Start-Process'))) {
     assert.match(line, /WindowStyle Hidden/, line)
   }
+})
+
+test('fresh installs boot only Balto Qwen while user-added models persist', async () => {
+  const setup = await read('runtime/balto.ps1')
+  const settings = await read('runtime/templates/settings.yaml')
+  const profile = await read('runtime/templates/profile.patch.yml')
+
+  assert.match(settings, /displayName: Balto Qwen/)
+  assert.match(settings, /name: Balto Qwen 3\.8 27B/)
+  assert.match(profile, /id: llm-deepseek\s+disabled: true/)
+  assert.match(setup, /if \(-not \(Test-Path -LiteralPath \$settingsPath\)\)/)
+  assert.doesNotMatch(setup, /settings\.yaml'\) -Destination \(Join-Path \$dshHome 'settings\.yaml'\) -Force/)
+  assert.match(setup, /'--profile', 'web', '--patch', \$profilePatch/)
 })
