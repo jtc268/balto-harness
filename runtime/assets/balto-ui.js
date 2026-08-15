@@ -84,12 +84,17 @@
   function brandCollapsedSidebar() {
     for (const toggle of document.querySelectorAll('button[aria-label="Open sidebar"]')) {
       const whale = toggle.querySelector('svg[class*="_railFish"]')
-      if (!whale || toggle.querySelector('[data-balto-collapse-mark]')) continue
-      const icon = document.createElement('img')
-      icon.src = '/assets/balto-mark.svg'
-      icon.alt = ''
+      if (!whale || toggle.querySelector('[data-balto-collapse-icon]')) continue
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+      icon.setAttribute('viewBox', '0 0 24 24')
+      icon.setAttribute('fill', 'none')
+      icon.setAttribute('stroke', 'currentColor')
+      icon.setAttribute('stroke-width', '1.8')
+      icon.setAttribute('stroke-linecap', 'round')
+      icon.setAttribute('stroke-linejoin', 'round')
       icon.setAttribute('aria-hidden', 'true')
-      icon.dataset.baltoCollapseMark = 'true'
+      icon.dataset.baltoCollapseIcon = 'true'
+      icon.innerHTML = '<rect x="3.5" y="3.5" width="17" height="17" rx="3"></rect><path d="M9 4v16"></path>'
       toggle.insertBefore(icon, whale)
     }
   }
@@ -286,7 +291,7 @@
     [data-balto-brand="true"] { width: auto !important; display: inline-flex !important; align-items: center !important; gap: 9px !important; color: #f5f7f8 !important; }
     [data-balto-brand="true"] > img { width: 27px !important; height: 27px !important; flex: 0 0 27px; }
     button[aria-label="Open sidebar"] > svg[class*="_railFish"] { display: none !important; }
-    button[aria-label="Open sidebar"] > img[data-balto-collapse-mark] { width: 27px !important; height: 27px !important; display: block; flex: 0 0 27px; object-fit: contain; }
+    button[aria-label="Open sidebar"] > svg[data-balto-collapse-icon] { width: 22px !important; height: 22px !important; display: block; flex: 0 0 22px; color: rgba(245,247,248,.86); }
     #balto-remote-settings { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 4px; padding: 22px 0 2px; border-top: 1px solid rgba(255,255,255,.1); font-family: Inter, "Segoe UI", sans-serif; }
     .balto-remote-copy-block { min-width: 0; display: grid; gap: 5px; }
     .balto-remote-copy-block strong { color: rgba(255,255,255,.94); font-size: 14px; font-weight: 600; }
