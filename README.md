@@ -4,11 +4,11 @@
 
 # Balto Speedrunner
 
-Qwen 3.8 27B at 2x the speed on one RTX 5090. Code at 150 tok/s. Chat at up to 300 tok/s.
+Qwen 3.8 27B at 2x the speed on one RTX 5090. Code at ~100-150 tok/s. Chat at up to 300 tok/s.
 
-The normal path has no infrastructure screens. Run the installer, approve Windows if it asks to enable WSL, and Balto handles the rest. It resumes setup after a required restart, preserves partial downloads, and opens the coding workspace as soon as the model is ready.
+Run the installer, approve Windows if it asks to enable WSL, and Balto handles the rest. It resumes setup after a required restart, preserves partial downloads, and opens the coding workspace as soon as the model is ready.
 
-The Windows app uses Tauri and the system WebView2 runtime. It does not bundle Chromium. Model inference runs in Docker, and Balto keeps its Node.js workspace runtime in its own app data directory.
+The Windows app uses Tauri and the system WebView2 runtime. Model inference runs in Docker, and Balto keeps its Node.js workspace runtime in its own app data directory.
 
 ## Measured on our RTX 5090
 
@@ -16,8 +16,6 @@ The Windows app uses Tauri and the system WebView2 runtime. It does not bundle C
 | --- | ---: | ---: | --- |
 | Chat | Up to 300 tok/s | Short prompt | Warm model |
 | Code | 150 tok/s | Live agent session | Real tool calls |
-
-These are measurements from one machine, not a guarantee for every prompt. Prompt length, tool latency, GPU temperature, other GPU workloads, and sampling all affect speed.
 
 ## What the installer does
 
@@ -30,7 +28,7 @@ These are measurements from one machine, not a guarantee for every prompt. Promp
 7. Reminds the owner to unload other local models before starting Balto.
 8. Applies future performance configuration updates without deleting the persistent model cache.
 
-The small app installer does not contain the Docker image or model weights. First launch requires a large download and at least 90 GB of free disk space.
+First launch requires a large download and at least 90 GB of free disk space.
 
 ## Private remote steering
 
