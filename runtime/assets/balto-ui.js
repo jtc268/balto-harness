@@ -140,6 +140,15 @@
     .balto-sidebar-label { color: rgba(245,247,248,.48); font-size: 7px; font-weight: 850; letter-spacing: 1.35px; text-transform: uppercase; }
     [data-balto-hero="true"] { display: inline-flex !important; align-items: center; justify-content: center; }
     [data-balto-hero="true"] > img { width: 31px !important; height: 31px !important; }
+    [class*="_previewBadge"] {
+      align-self: center !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      margin-top: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+    }
     @media (max-width: 900px) { #balto-live-bar .balto-brand { display: none; } }
   `
   document.head.append(style)

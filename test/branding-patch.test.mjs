@@ -37,3 +37,11 @@ test('branding patch runs before the upstream module and removes its boot wordma
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('preview badge is vertically centered in the Balto hero', async () => {
+  const script = await readFile(join(repoRoot, 'runtime', 'assets', 'balto-ui.js'), 'utf8')
+  assert.match(script, /\[class\*="_previewBadge"\]/)
+  assert.match(script, /align-self: center !important/)
+  assert.match(script, /align-items: center !important/)
+  assert.match(script, /margin-top: 0 !important/)
+})
