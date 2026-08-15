@@ -15,6 +15,8 @@
   </a>
 </p>
 
+<p align="center"><sub>On a Mac? <a href="https://github.com/jtc268/balto-speedrunner-mac">Get Balto for Mac</a></sub></p>
+
 <p align="center"><sub>First launch downloads the inference engine and model. Keep at least 90 GB free.</sub></p>
 
 <p align="center">
