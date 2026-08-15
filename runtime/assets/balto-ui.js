@@ -151,13 +151,7 @@
     [data-balto-hero="true"] { display: inline-flex !important; align-items: center; justify-content: center; }
     [data-balto-hero="true"] > img { width: 31px !important; height: 31px !important; }
     [class*="_previewBadge"] {
-      align-self: center !important;
-      display: inline-flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      margin-top: 0 !important;
-      padding-top: 0 !important;
-      padding-bottom: 0 !important;
+      display: none !important;
     }
     @media (prefers-reduced-motion: reduce) {
       #balto-live-bar .balto-sprinter img,
