@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.7",
   "description": "One-click local coding agent for RTX 5090 systems",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "author": "Adore LLC",
   "type": "module",
   "scripts": {

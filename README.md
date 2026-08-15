@@ -108,11 +108,11 @@ Balto supports two different signatures:
 
 Every install shows its version in Settings. A green update arrow appears when GitHub publishes a newer signed release; one click verifies, installs, and relaunches it.
 
-The release workflow requires an Azure Artifact Signing account and certificate profile. It refuses to publish a release without those credentials. Local development builds remain unsigned.
+The release workflow uses Azure Artifact Signing when publisher credentials are configured. The in-app updater always verifies Tauri update signatures. Local development builds remain unsigned.
 
 ## License and credits
 
-Balto Speedrunner is copyright 2026 Adore LLC and distributed under the MIT License.
+Balto Speedrunner is proprietary software, copyright 2026 Adore LLC. All rights reserved.
 
 The coding agent interface integrates MIT-licensed software from DeepSeek AI. Inference is powered by SGLang. Qwen model weights remain under their own license. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the full notices.
 
