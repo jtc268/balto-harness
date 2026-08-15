@@ -40,9 +40,14 @@ $nodeExe = Join-Path $nodeRoot 'node.exe'
 $npmCli = Join-Path $nodeRoot 'node_modules\npm\bin\npm-cli.js'
 $containerName = 'balto-qwen38'
 $containerImage = 'lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1'
-$containerConfig = 'qwen38-nvfp4-dspark-80k-v7'
-$modelName = 'RadixArk/Qwen3.8-27B-NVFP4'
-$draftName = 'RadixArk/Qwen3.8-27B-DSpark'
+$containerConfig = 'qwen38-nvfp4-dspark-80k-v8'
+$modelDownloaderName = 'balto-model-download'
+$modelDownloaderImage = 'python@sha256:dd29372629eeba2dd003fd9e9d35a5b8236c44727875a0364254b5127af88e65'
+$modelRevision = '52d1adc5f38aa5ebf099c29ed7025ba34cfbb854'
+$draftRevision = '923ed3a8572615643f0137e424e4ce4edd7f1cda'
+$modelName = "/root/.cache/huggingface/hub/models--RadixArk--Qwen3.8-27B-NVFP4/snapshots/$modelRevision"
+$draftName = "/root/.cache/huggingface/hub/models--RadixArk--Qwen3.8-27B-DSpark/snapshots/$draftRevision"
+$expectedModelBytes = [uint64]24663904513
 
 New-Item -ItemType Directory -Force -Path $BaltoData, $runtimeRoot, $dshHome, $pidRoot, $workspaceRoot | Out-Null
 
@@ -143,6 +148,27 @@ function Invoke-HiddenNativeNoOutput {
   }
 }
 
+function Start-HiddenNativeProcess {
+  param(
+    [Parameter(Mandatory = $true)][string]$FilePath,
+    [string[]]$Arguments = @()
+  )
+
+  $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
+  $startInfo.FileName = $FilePath
+  $startInfo.Arguments = (($Arguments | ForEach-Object { ConvertTo-NativeArgument ([string]$_) }) -join ' ')
+  $startInfo.UseShellExecute = $false
+  $startInfo.CreateNoWindow = $true
+
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $startInfo
+  if (-not $process.Start()) {
+    $process.Dispose()
+    throw "Could not start $FilePath."
+  }
+  return $process
+}
+
 function Invoke-LoggedNative {
   param(
     [Parameter(Mandatory = $true)][string]$FilePath,
@@ -173,6 +199,9 @@ function New-DefaultState {
     downloadTotalGb = 24
     downloadRateMbps = $null
     etaSeconds = $null
+    engineProgress = $null
+    modelProgress = $null
+    workspaceProgress = $null
     gpuName = $null
     gpuMemoryMib = $null
     gpuMemoryUsedMib = $null
@@ -415,7 +444,7 @@ function Ensure-Wsl {
 
 function Ensure-Docker {
   if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-    Update-State @{ phase = 'installing'; stage = 'engine'; progress = 13; message = 'Preparing the local inference engine.' }
+    Update-State @{ phase = 'installing'; stage = 'engine'; progress = 13; message = 'Preparing the local inference engine.'; engineProgress = $null }
     Write-Log 'Installing Docker Desktop in official per-user mode.'
     $dockerInstaller = Join-Path $runtimeRoot 'Docker Desktop Installer.exe'
     $dockerInstallerUrl = 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe'
@@ -442,7 +471,7 @@ function Ensure-Docker {
   )
   $desktop = $desktopCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
   if ($desktop) {
-    Update-State @{ phase = 'installing'; stage = 'engine'; progress = 18; message = 'Starting the local inference engine.' }
+    Update-State @{ phase = 'installing'; stage = 'engine'; progress = 18; message = 'Starting the local inference engine.'; engineProgress = $null }
     Start-Process -FilePath $desktop -WindowStyle Hidden | Out-Null
   }
   for ($attempt = 0; $attempt -lt 120; $attempt++) {
@@ -458,7 +487,7 @@ function Ensure-Docker {
 
 function Ensure-NodeRuntime {
   if (Test-Path -LiteralPath $nodeExe) { return }
-  Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 22; message = "Downloading Balto's private Node.js runtime." }
+  Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 22; message = "Downloading Balto's private Node.js runtime."; workspaceProgress = $null }
   $archive = Join-Path $runtimeRoot "node-v$nodeVersion-win-x64.zip"
   $url = "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip"
   Write-Log "Downloading $url"
@@ -515,7 +544,7 @@ function Ensure-WorkspaceRuntime {
   $dshEntry = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'
   $yamlModule = Join-Path $dshRoot 'node_modules\js-yaml\dist\js-yaml.mjs'
   if (-not (Test-Path -LiteralPath $dshEntry) -or -not (Test-Path -LiteralPath $yamlModule)) {
-    Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Installing the Balto coding workspace.' }
+    Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Installing the Balto coding workspace.'; workspaceProgress = $null }
     for ($attempt = 1; $attempt -le 3; $attempt++) {
       Write-Log "Installing the pinned coding workspace. Attempt $attempt of 3."
       try {
@@ -526,7 +555,7 @@ function Ensure-WorkspaceRuntime {
       }
       if ((Test-Path -LiteralPath $dshEntry) -and (Test-Path -LiteralPath $yamlModule)) { break }
       if ($attempt -lt 3) {
-        Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Finishing the Balto coding workspace. Downloaded files are being reused.' }
+        Update-State @{ phase = 'downloading-runtime'; stage = 'app-runtime'; progress = 28; message = 'Finishing the Balto coding workspace. Downloaded files are being reused.'; workspaceProgress = $null }
         Start-Sleep -Seconds (2 * $attempt)
       }
     }
@@ -609,8 +638,240 @@ function Get-ModelCacheVolume {
   return 'balto-qwen38-cache'
 }
 
+function Test-DockerImage([string]$Image) {
+  try {
+    $result = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('image', 'inspect', '--format', '{{.Id}}', $Image)
+    return $result.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($result.StdOut)
+  }
+  catch { return $false }
+}
+
+function Test-WorkspaceDependencies {
+  $dshEntry = Join-Path $dshRoot 'node_modules\@deepseek-ai\dsh\lib\bin.js'
+  $yamlModule = Join-Path $dshRoot 'node_modules\js-yaml\dist\js-yaml.mjs'
+  return (Test-Path -LiteralPath $dshEntry) -and (Test-Path -LiteralPath $yamlModule)
+}
+
+function Test-ModelCacheMarker([string]$CacheVolume) {
+  if (-not (Test-DockerImage $modelDownloaderImage)) { return $false }
+  try {
+    $result = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @(
+      'run', '--rm',
+      '-v', "${CacheVolume}:/cache:ro",
+      $modelDownloaderImage,
+      'python', '-c', "from pathlib import Path; print('ready' if Path('/cache/.balto-qwen38-complete.json').is_file() else 'missing')"
+    )
+    return $result.ExitCode -eq 0 -and $result.StdOut.Trim() -eq 'ready'
+  }
+  catch { return $false }
+}
+
+function Get-ModelCacheBytes {
+  try {
+    $result = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @(
+      'exec', $modelDownloaderName, 'sh', '-lc', 'du -sb /root/.cache/huggingface/hub 2>/dev/null | cut -f1'
+    )
+    if ($result.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($result.StdOut)) {
+      return [uint64]$result.StdOut.Trim()
+    }
+  }
+  catch {}
+  return [uint64]0
+}
+
+function Start-ModelDownloader([string]$CacheVolume) {
+  Invoke-LoggedNative -FilePath 'docker' -Arguments @('rm', '--force', $modelDownloaderName) -Prefix 'model downloader cleanup' -AllowFailure
+  $result = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @(
+    'run', '-d', '--name', $modelDownloaderName,
+    '-e', 'HF_XET_HIGH_PERFORMANCE=1',
+    '-e', 'HF_HUB_DISABLE_TELEMETRY=1',
+    '-e', 'HF_HUB_DISABLE_PROGRESS_BARS=1',
+    '-e', 'HF_HUB_DOWNLOAD_TIMEOUT=120',
+    '-v', "${CacheVolume}:/root/.cache/huggingface/hub",
+    '-v', "${Resources}:/opt/balto:ro",
+    $modelDownloaderImage,
+    'sh', '-lc', "python -m pip install --disable-pip-version-check --no-cache-dir 'huggingface_hub[hf_xet]==0.34.4' && python /opt/balto/download-models.py"
+  )
+  foreach ($stream in @($result.StdOut, $result.StdErr)) {
+    foreach ($line in ($stream -split '\r?\n')) {
+      if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Log "model downloader: $line" }
+    }
+  }
+  if ($result.ExitCode -ne 0) { throw 'Balto could not start the accelerated model download.' }
+}
+
+function Ensure-ParallelAssets {
+  $cacheVolume = Get-ModelCacheVolume
+  Invoke-LoggedNative -FilePath 'docker' -Arguments @('volume', 'create', $cacheVolume) -Prefix 'docker volume'
+
+  $engineDone = Test-DockerImage $containerImage
+  $helperDone = Test-DockerImage $modelDownloaderImage
+  $workspaceDone = Test-WorkspaceDependencies
+  $modelDone = $helperDone -and (Test-ModelCacheMarker $cacheVolume)
+
+  $engineProcess = $null
+  $helperProcess = $null
+  $workspaceProcess = $null
+  $modelStarted = $false
+  $engineAttempts = 0
+  $helperAttempts = 0
+  $workspaceAttempts = 0
+  $modelAttempts = 0
+  $lastDownloadedBytes = [uint64]0
+  $lastSampleTime = Get-Date
+
+  try {
+    for ($tick = 0; $tick -lt 7200; $tick++) {
+      if (-not $engineDone -and -not $engineProcess) {
+        $engineAttempts++
+        Write-Log "Starting SGLang image download. Attempt $engineAttempts of 3."
+        $engineProcess = Start-HiddenNativeProcess -FilePath 'docker' -Arguments @('pull', $containerImage)
+      }
+      if (-not $helperDone -and -not $helperProcess) {
+        $helperAttempts++
+        Write-Log "Starting accelerated downloader image. Attempt $helperAttempts of 3."
+        $helperProcess = Start-HiddenNativeProcess -FilePath 'docker' -Arguments @('pull', $modelDownloaderImage)
+      }
+      if (-not $workspaceDone -and -not $workspaceProcess) {
+        $workspaceAttempts++
+        Write-Log "Installing the coding workspace in parallel. Attempt $workspaceAttempts of 3."
+        $workspaceProcess = Start-HiddenNativeProcess -FilePath $nodeExe -Arguments @(
+          $npmCli, 'install', '--prefix', $dshRoot,
+          '@deepseek-ai/dsh@0.1.0-rc.6', 'js-yaml@4.2.0',
+          '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'
+        )
+      }
+
+      if ($engineProcess -and $engineProcess.HasExited) {
+        $exitCode = $engineProcess.ExitCode
+        $engineProcess.Dispose()
+        $engineProcess = $null
+        $engineDone = $exitCode -eq 0 -and (Test-DockerImage $containerImage)
+        if (-not $engineDone -and $engineAttempts -ge 3) { throw 'The SGLang runtime could not finish downloading after three resumable attempts.' }
+      }
+      if ($helperProcess -and $helperProcess.HasExited) {
+        $exitCode = $helperProcess.ExitCode
+        $helperProcess.Dispose()
+        $helperProcess = $null
+        $helperDone = $exitCode -eq 0 -and (Test-DockerImage $modelDownloaderImage)
+        if (-not $helperDone -and $helperAttempts -ge 3) { throw 'The accelerated model downloader could not be prepared after three attempts.' }
+      }
+      if ($workspaceProcess -and $workspaceProcess.HasExited) {
+        $exitCode = $workspaceProcess.ExitCode
+        $workspaceProcess.Dispose()
+        $workspaceProcess = $null
+        $workspaceDone = $exitCode -eq 0 -and (Test-WorkspaceDependencies)
+        if (-not $workspaceDone -and $workspaceAttempts -ge 3) { throw 'The coding workspace could not finish after three resumable attempts.' }
+      }
+
+      if ($helperDone -and -not $modelDone -and -not $modelStarted) {
+        $modelAttempts++
+        Write-Log "Starting Qwen and DSpark downloads in parallel. Attempt $modelAttempts of 4."
+        Start-ModelDownloader $cacheVolume
+        $modelStarted = $true
+      }
+
+      if ($modelStarted) {
+        $stateResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('inspect', '--format', '{{.State.Status}}|{{.State.ExitCode}}', $modelDownloaderName)
+        if ($stateResult.ExitCode -ne 0) {
+          $modelStarted = $false
+          if ($modelAttempts -ge 4) { throw 'The model downloader disappeared after four resumable attempts.' }
+        }
+        else {
+          $parts = $stateResult.StdOut.Trim() -split '\|'
+          if ($parts[0] -eq 'exited') {
+            $modelDone = $parts[1] -eq '0' -and (Test-ModelCacheMarker $cacheVolume)
+            if (-not $modelDone) {
+              $logs = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('logs', '--tail', '30', $modelDownloaderName)
+              foreach ($line in (@($logs.StdOut, $logs.StdErr) -join "`r`n" -split '\r?\n')) {
+                if (-not [string]::IsNullOrWhiteSpace($line)) { Write-Log "model downloader: $line" }
+              }
+              $modelStarted = $false
+              if ($modelAttempts -ge 4) { throw 'The Qwen model download could not finish after four resumable attempts.' }
+            }
+          }
+        }
+      }
+
+      $downloadedBytes = if ($modelDone) { $expectedModelBytes } elseif ($modelStarted) { Get-ModelCacheBytes } else { [uint64]0 }
+      if ($downloadedBytes -gt $expectedModelBytes) { $downloadedBytes = $expectedModelBytes }
+      $modelPercent = if ($modelDone) { 100 } else { [math]::Min(99, [math]::Floor(($downloadedBytes / $expectedModelBytes) * 100)) }
+      $sampleTime = Get-Date
+      $downloadRateMbps = $null
+      $etaSeconds = $null
+      if ($downloadedBytes -gt $lastDownloadedBytes) {
+        $sampleSeconds = ($sampleTime - $lastSampleTime).TotalSeconds
+        if ($sampleSeconds -gt 0) {
+          $bytesPerSecond = ($downloadedBytes - $lastDownloadedBytes) / $sampleSeconds
+          $downloadRateMbps = [math]::Round($bytesPerSecond / 1MB, 1)
+          if ($bytesPerSecond -gt 0 -and $downloadedBytes -lt $expectedModelBytes) {
+            $etaSeconds = [uint64][math]::Min(21600, [math]::Ceiling(($expectedModelBytes - $downloadedBytes) / $bytesPerSecond))
+          }
+        }
+      }
+      $lastDownloadedBytes = $downloadedBytes
+      $lastSampleTime = $sampleTime
+
+      $engineProgress = if ($engineDone) { 100 } else { $null }
+      $workspaceProgress = if ($workspaceDone) { 100 } else { $null }
+      $overallProgress = [math]::Min(90, 12 + [math]::Floor($modelPercent * 0.5) + $(if ($engineDone) { 18 } else { 2 }) + $(if ($workspaceDone) { 10 } else { 1 }))
+      $message = if (-not $modelDone) {
+        "Downloading Qwen, SGLang, and the coding workspace in parallel. Qwen is $modelPercent% complete."
+      }
+      elseif (-not $engineDone -or -not $workspaceDone) {
+        'Qwen is downloaded. Balto is finishing the remaining local stack jobs.'
+      }
+      else {
+        'All downloads are complete. Balto is preparing the coding workspace.'
+      }
+      Update-State @{
+        phase = if ($modelDone) { 'downloading-runtime' } else { 'downloading-model' }
+        stage = 'parallel-assets'
+        progress = $overallProgress
+        message = $message
+        downloadedGb = [math]::Round($downloadedBytes / 1GB, 1)
+        downloadTotalGb = [math]::Round($expectedModelBytes / 1GB, 1)
+        downloadRateMbps = $downloadRateMbps
+        etaSeconds = $etaSeconds
+        engineProgress = $engineProgress
+        modelProgress = [int]$modelPercent
+        workspaceProgress = $workspaceProgress
+      }
+
+      if ($engineDone -and $modelDone -and $workspaceDone) { break }
+      Start-Sleep -Seconds 2
+    }
+
+    if (-not $engineDone -or -not $modelDone -or -not $workspaceDone) {
+      throw 'The parallel setup window expired. Completed downloads are safe and Balto will resume them.'
+    }
+  }
+  finally {
+    foreach ($process in @($engineProcess, $helperProcess, $workspaceProcess)) {
+      if ($process) { $process.Dispose() }
+    }
+  }
+
+  Invoke-LoggedNative -FilePath 'docker' -Arguments @('rm', '--force', $modelDownloaderName) -Prefix 'model downloader cleanup' -AllowFailure
+  Ensure-WorkspaceRuntime
+  Update-State @{
+    phase = 'starting'
+    stage = 'launch'
+    progress = 90
+    message = 'Downloads complete. Loading Qwen onto the RTX 5090.'
+    engineProgress = 100
+    modelProgress = 100
+    workspaceProgress = 100
+    etaSeconds = $null
+  }
+}
+
 function Ensure-Container {
   $cacheVolume = Get-ModelCacheVolume
+  if (-not (Test-DockerImage $containerImage)) { throw 'The pinned SGLang runtime is not available yet.' }
+  if (-not (Test-DockerImage $modelDownloaderImage) -or -not (Test-ModelCacheMarker $cacheVolume)) {
+    throw 'The Qwen model cache is not complete yet.'
+  }
   $existingResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('ps', '-a', '--filter', "name=^/$containerName$", '--format', '{{.Names}}')
   if ($existingResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($existingResult.StdOut)) {
     $labelsResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('inspect', '--format', '{{json .Config.Labels}}', $containerName)
@@ -628,11 +889,7 @@ function Ensure-Container {
     Invoke-LoggedNative -FilePath 'docker' -Arguments @('rm', '--force', $containerName) -Prefix 'docker'
   }
 
-  Update-State @{ phase = 'downloading-runtime'; stage = 'inference-runtime'; progress = 34; message = 'Downloading the pinned SGLang runtime. Docker resumes interrupted layers.' }
-  Invoke-LoggedNative -FilePath 'docker' -Arguments @('pull', $containerImage) -Prefix 'docker pull'
-  Invoke-LoggedNative -FilePath 'docker' -Arguments @('volume', 'create', $cacheVolume) -Prefix 'docker volume'
-
-  Update-State @{ phase = 'downloading-model'; stage = 'model'; progress = 47; message = 'Downloading Qwen 3.8 27B NVFP4 and its DSpark draft. Partial downloads are preserved.'; downloadedGb = 0; downloadTotalGb = 24; downloadRateMbps = $null; etaSeconds = $null }
+  Update-State @{ phase = 'starting'; stage = 'launch'; progress = 91; message = 'Loading Qwen onto the RTX 5090.'; etaSeconds = $null }
   $dockerArgs = @(
     'run', '-d', '--name', $containerName,
     '--label', "com.adore.balto.config=$containerConfig",
@@ -674,53 +931,9 @@ function Ensure-Container {
 }
 
 function Wait-ForInference {
-  $lastDownloadedBytes = $null
-  $lastSampleTime = Get-Date
-  $expectedModelBytes = 24GB
-  # A cold 24 GB model download can take well over 20 minutes on a healthy
-  # residential connection. Keep reporting progress for up to four hours.
-  for ($attempt = 0; $attempt -lt 2880; $attempt++) {
+  Update-State @{ phase = 'starting'; stage = 'launch'; progress = 92; message = 'Qwen is loading into GPU memory.'; etaSeconds = $null }
+  for ($attempt = 0; $attempt -lt 480; $attempt++) {
     if (Test-HttpReady 'http://127.0.0.1:30000/v1/models') { return }
-    if ($attempt % 3 -eq 0) {
-      $downloadedBytes = 0
-      try {
-        $downloadResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('exec', $containerName, 'sh', '-lc', 'du -sb /root/.cache/huggingface/hub 2>/dev/null | cut -f1')
-        if ($downloadResult.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($downloadResult.StdOut)) {
-          $downloadedBytes = [uint64]$downloadResult.StdOut.Trim()
-        }
-      }
-      catch {}
-      $sampleTime = Get-Date
-      $downloadedGb = [math]::Round($downloadedBytes / 1GB, 1)
-      $modelProgress = [math]::Min(1, $downloadedBytes / $expectedModelBytes)
-      $progress = [math]::Min(84, 50 + [math]::Floor($modelProgress * 34))
-      $detail = if ($downloadedGb -gt 0) { "$downloadedGb GB downloaded and verified." } else { 'Connecting to the model host.' }
-      $downloadRateMbps = $null
-      $etaSeconds = $null
-      if ($null -ne $lastDownloadedBytes -and $downloadedBytes -gt $lastDownloadedBytes) {
-        $sampleSeconds = ($sampleTime - $lastSampleTime).TotalSeconds
-        if ($sampleSeconds -gt 0) {
-          $bytesPerSecond = ($downloadedBytes - $lastDownloadedBytes) / $sampleSeconds
-          $downloadRateMbps = [math]::Round($bytesPerSecond / 1MB, 1)
-          $remainingBytes = [math]::Max(0, $expectedModelBytes - $downloadedBytes)
-          if ($bytesPerSecond -gt 0 -and $remainingBytes -gt 0) {
-            $etaSeconds = [uint64][math]::Min(21600, [math]::Ceiling($remainingBytes / $bytesPerSecond))
-          }
-        }
-      }
-      Update-State @{
-        phase = 'downloading-model'
-        stage = 'model'
-        progress = $progress
-        message = "Preparing Qwen 3.8 27B. $detail Interrupted downloads resume automatically."
-        downloadedGb = $downloadedGb
-        downloadTotalGb = 24
-        downloadRateMbps = $downloadRateMbps
-        etaSeconds = $etaSeconds
-      }
-      $lastDownloadedBytes = $downloadedBytes
-      $lastSampleTime = $sampleTime
-    }
     $runningResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('inspect', '-f', '{{.State.Running}}', $containerName)
     if ($runningResult.ExitCode -ne 0 -or $runningResult.StdOut.Trim() -ne 'true') {
       $logsResult = Invoke-HiddenNativeCapture -FilePath 'docker' -Arguments @('logs', '--tail', '25', $containerName)
@@ -729,7 +942,7 @@ function Wait-ForInference {
     }
     Start-Sleep -Seconds 5
   }
-  throw 'The model did not become ready within four hours. Balto preserved all downloaded data for retry.'
+  throw 'Qwen did not finish loading onto the GPU within 40 minutes. The downloaded model is safe for retry.'
 }
 
 function Start-LocalServices {
@@ -784,16 +997,16 @@ function Disable-Remote {
 
 function Install-Balto {
   Enable-SetupResume
-  Update-State @{ phase = 'installing'; stage = 'system-check'; progress = 10; message = 'Checking this RTX 5090 system.'; warning = $null; startedAt = (Get-Date).ToUniversalTime().ToString('o'); downloadedGb = $null; downloadRateMbps = $null; etaSeconds = $null }
+  Update-State @{ phase = 'installing'; stage = 'system-check'; progress = 10; message = 'Checking this RTX 5090 system.'; warning = $null; startedAt = (Get-Date).ToUniversalTime().ToString('o'); downloadedGb = $null; downloadRateMbps = $null; etaSeconds = $null; engineProgress = 0; modelProgress = 0; workspaceProgress = 0 }
   Assert-Compatible
   Ensure-Wsl
   Ensure-Docker
   Ensure-NodeRuntime
-  Ensure-WorkspaceRuntime
+  Ensure-ParallelAssets
   Ensure-Container
   Wait-ForInference
   Start-LocalServices
-  Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'; inferenceReady = $true; workspaceReady = $true; etaSeconds = 0 }
+  Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Qwen 3.8 27B is loaded and the coding workspace is live.'; inferenceReady = $true; workspaceReady = $true; etaSeconds = 0; engineProgress = 100; modelProgress = 100; workspaceProgress = 100 }
   Disable-SetupResume
   Refresh-Status | Out-Null
 }
@@ -831,11 +1044,11 @@ try {
       Assert-Compatible
       Ensure-Docker
       Ensure-NodeRuntime
-      Ensure-WorkspaceRuntime
+      Ensure-ParallelAssets
       Ensure-Container
       Wait-ForInference
       Start-LocalServices
-      Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Balto is ready.'; etaSeconds = 0 }
+      Update-State @{ phase = 'ready'; stage = 'ready'; progress = 100; message = 'Balto is ready.'; etaSeconds = 0; engineProgress = 100; modelProgress = 100; workspaceProgress = 100 }
       Disable-SetupResume
       Refresh-Status | Out-Null
     }

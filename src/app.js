@@ -11,19 +11,16 @@ const elements = {
   progressValue: document.querySelector('#progress-value'),
   journey: document.querySelector('#setup-journey'),
   journeyTitle: document.querySelector('#journey-title'),
-  journeyDetail: document.querySelector('#journey-detail'),
-  journeyStep: document.querySelector('#journey-step'),
+  journeyProgress: document.querySelector('#journey-progress'),
   journeyEta: document.querySelector('#journey-eta'),
-  journeyNote: document.querySelector('#journey-note'),
-  track: document.querySelector('#balto-track'),
+  overallBar: document.querySelector('#setup-overall-bar'),
   downloadDetail: document.querySelector('#download-detail'),
   elapsedTime: document.querySelector('#elapsed-time'),
-  setupSteps: [
-    document.querySelector('#setup-step-system'),
-    document.querySelector('#setup-step-runtime'),
-    document.querySelector('#setup-step-model'),
-    document.querySelector('#setup-step-launch'),
-  ],
+  setupSteps: {
+    model: document.querySelector('#setup-step-model'),
+    stack: document.querySelector('#setup-step-stack'),
+    launch: document.querySelector('#setup-step-launch'),
+  },
   gpu: document.querySelector('#check-gpu'),
   docker: document.querySelector('#check-docker'),
   model: document.querySelector('#check-model'),
@@ -75,13 +72,16 @@ const idlePreviewStatus = {
 const setupPreviewStatus = {
   ...idlePreviewStatus,
   phase: 'downloading-model',
-  stage: 'model',
-  message: 'Preparing Qwen 3.8 27B. 9.8 GB downloaded and verified. Interrupted downloads resume automatically',
+  stage: 'parallel-assets',
+  message: 'Downloading Qwen, SGLang, and the coding workspace in parallel. Qwen is 43% complete',
   progress: 64,
   downloadedGb: 9.8,
-  downloadTotalGb: 24,
+  downloadTotalGb: 23,
   downloadRateMbps: 91.4,
   etaSeconds: 155,
+  engineProgress: null,
+  modelProgress: 43,
+  workspaceProgress: 100,
   startedAt: new Date(Date.now() - 7 * 60 * 1000 - 24 * 1000).toISOString(),
   inferenceReady: false,
   workspaceReady: false,
@@ -101,7 +101,7 @@ const stageExperience = {
     note: 'No choices needed. Balto uses the fastest safe configuration for this GPU',
   },
   windows: {
-    step: 0,
+    step: 1,
     title: 'Preparing Windows',
     detail: 'Balto is enabling the Windows support required to run the NVIDIA inference stack locally',
     eta: 'Usually 1 to 3 minutes',
@@ -132,8 +132,16 @@ const stageExperience = {
     activity: 'Downloading cached runtime layers',
     note: 'Completed layers are cached, so interrupted setup and future updates are much faster',
   },
+  'parallel-assets': {
+    step: 1,
+    title: 'Downloading everything at once',
+    detail: 'Balto is downloading Qwen and SGLang while it builds your coding workspace in parallel',
+    eta: 'Timing depends on your connection',
+    activity: 'Three setup jobs are running together',
+    note: 'Every completed model byte and Docker layer is preserved if setup is interrupted',
+  },
   model: {
-    step: 2,
+    step: 1,
     title: 'Qwen is coming aboard',
     detail: 'Balto is downloading the optimized Qwen 3.8 27B model and its speed draft. This is the largest step',
     eta: 'Usually 5 to 20 minutes',
@@ -141,7 +149,7 @@ const stageExperience = {
     note: 'Keep Balto open. Every completed file is preserved and interrupted downloads resume automatically',
   },
   launch: {
-    step: 3,
+    step: 2,
     title: 'Loading Qwen onto your GPU',
     detail: 'Balto is loading the model into VRAM, starting the gateway, and opening your fresh coding workspace',
     eta: 'Usually 1 to 3 minutes',
@@ -149,7 +157,7 @@ const stageExperience = {
     note: 'The first GPU load takes a little longer. Future launches reuse everything already installed',
   },
   ready: {
-    step: 3,
+    step: 2,
     title: 'Balto made it',
     detail: 'Qwen is loaded on your RTX 5090 and the coding workspace is ready',
     eta: 'Ready to code',
@@ -203,19 +211,17 @@ function renderJourney(status, progress, ready, failed, recovering) {
   document.body.classList.toggle('setup-active', (working && !failed) || recovering)
   document.body.classList.toggle('setup-failed', failed && !recovering)
   document.body.classList.toggle('setup-complete', ready)
-  elements.track.style.setProperty('--progress', Math.max(0, Math.min(100, progress)))
-  elements.journeyTitle.textContent = recovering ? 'Balto is finishing setup' : failed ? 'Balto paused here' : experience.title
-  elements.journeyDetail.textContent = recovering
-    ? 'This step needs another pass. Balto is retrying automatically and reusing everything already downloaded'
+  const clampedProgress = Math.max(0, Math.min(100, progress))
+  elements.overallBar.style.width = `${clampedProgress}%`
+  elements.overallBar.parentElement.setAttribute('aria-valuenow', String(clampedProgress))
+  elements.journeyProgress.textContent = `${clampedProgress}%`
+  elements.journeyTitle.textContent = ready
+    ? 'Balto is ready'
     : failed
-    ? 'Your completed work is safe. Balto will continue from this point when setup resumes'
-    : experience.detail
-  elements.journeyStep.textContent = ready ? '4 steps complete' : `Step ${step + 1} of 4`
-  elements.journeyNote.textContent = recovering
-    ? 'No action needed. Balto will keep moving as soon as this step is ready'
-    : failed
-    ? 'Open the setup log for the exact issue, then choose Finish setup to continue'
-    : experience.note
+      ? 'Setup paused'
+      : recovering
+        ? 'Finishing setup'
+        : 'Setting up Balto'
 
   if (working && !observedSetupStartedAt) observedSetupStartedAt = Date.now()
   const startedAt = status.startedAt ? Date.parse(status.startedAt) : observedSetupStartedAt
@@ -231,21 +237,58 @@ function renderJourney(status, progress, ready, failed, recovering) {
       ? `About ${formatDuration(etaSeconds)} left`
       : experience.eta
 
-  if (stage === 'model') {
+  if (recovering) {
+    elements.downloadDetail.textContent = 'Retrying automatically'
+  } else if (failed) {
+    elements.downloadDetail.textContent = withoutTrailingPeriod(status.message)
+  } else if (ready) {
+    elements.downloadDetail.textContent = 'Setup complete'
+  } else if (stage === 'model' || stage === 'parallel-assets') {
     const downloaded = Number(status.downloadedGb || 0)
     const total = Number(status.downloadTotalGb || 24)
     const rate = Number(status.downloadRateMbps || 0)
-    const pieces = [downloaded > 0 ? `${downloaded.toFixed(1)} GB of about ${total.toFixed(0)} GB` : experience.activity]
+    const pieces = [downloaded > 0 ? `Qwen ${downloaded.toFixed(1)} / ${total.toFixed(0)} GB` : 'Preparing downloads']
     if (rate > 0) pieces.push(`${rate.toFixed(0)} MB/s`)
-    elements.downloadDetail.textContent = pieces.join('  •  ')
+    elements.downloadDetail.textContent = pieces.join(' · ')
   } else {
-    elements.downloadDetail.textContent = recovering ? 'Retrying this step automatically' : failed ? withoutTrailingPeriod(status.message) : experience.activity
+    elements.downloadDetail.textContent = experience.activity
   }
 
-  elements.setupSteps.forEach((element, index) => {
-    const done = ready || index < step
+  const fallbackModelProgress = status.downloadTotalGb
+    ? Math.round((Number(status.downloadedGb || 0) / Number(status.downloadTotalGb)) * 100)
+    : 0
+  const engineProgress = Number.isFinite(Number(status.engineProgress)) ? Number(status.engineProgress) : null
+  const workspaceProgress = Number.isFinite(Number(status.workspaceProgress)) ? Number(status.workspaceProgress) : null
+  let stackProgress = null
+  if (ready || (engineProgress >= 100 && workspaceProgress >= 100)) stackProgress = 100
+  else if (engineProgress !== null && workspaceProgress !== null) stackProgress = Math.round((engineProgress + workspaceProgress) / 2)
+  else if (engineProgress !== null && engineProgress < 100) stackProgress = engineProgress
+  else if (workspaceProgress !== null && workspaceProgress < 100) stackProgress = workspaceProgress
+
+  const laneProgress = {
+    model: ready ? 100 : status.modelProgress ?? fallbackModelProgress,
+    stack: stackProgress,
+    launch: ready ? 100 : status.phase === 'starting' ? Math.min(95, Math.max(8, (progress - 90) * 10)) : 0,
+  }
+  const laneOrder = ['model', 'stack', 'launch']
+  const stageLanes = {
+    'system-check': ['model', 'stack'],
+    windows: ['stack'],
+    engine: ['stack'],
+    'app-runtime': ['stack'],
+    'inference-runtime': ['stack'],
+    'parallel-assets': ['model', 'stack'],
+    model: ['model'],
+    launch: ['launch'],
+  }
+  const activeLanes = new Set(stageLanes[stage] || [laneOrder[step]])
+  Object.entries(elements.setupSteps).forEach(([name, element]) => {
+    const value = laneProgress[name]
+    const determinate = value !== null && value !== undefined && Number.isFinite(Number(value))
+    const done = ready || determinate && Number(value) >= 100
+    const active = !done && activeLanes.has(name)
     element.classList.toggle('done', done)
-    element.classList.toggle('active', !ready && index === step)
+    element.classList.toggle('active', active)
   })
 }
 
@@ -295,7 +338,11 @@ function render(status) {
     elements.primaryLabel.textContent = 'Finish setup'
   } else if (isWorking(status.phase)) {
     elements.status.querySelector('span').textContent = 'Setting up Balto'
-    elements.phaseTitle.textContent = status.phase === 'downloading-model' ? 'Downloading the model' : 'Building the local stack'
+    elements.phaseTitle.textContent = status.stage === 'parallel-assets'
+      ? 'Downloading in parallel'
+      : status.phase === 'downloading-model'
+        ? 'Downloading the model'
+        : 'Building the local stack'
     elements.primaryLabel.textContent = 'Starting Balto'
   } else {
     elements.status.querySelector('span').textContent = 'Ready for setup'

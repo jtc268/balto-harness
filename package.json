@@ -1,7 +1,7 @@
 {
   "name": "balto-speedrunner",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "One-click local coding agent for RTX 5090 systems",
   "license": "UNLICENSED",
   "author": "Adore LLC",

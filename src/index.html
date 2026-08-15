@@ -56,61 +56,32 @@
         <section class="setup-journey" id="setup-journey" aria-live="polite" aria-label="Balto setup progress">
           <div class="journey-summary">
             <div>
-              <span class="journey-kicker">Automatic setup</span>
-              <h3 id="journey-title">Balto is getting ready</h3>
-              <p id="journey-detail">Everything happens here. Balto will open your coding workspace when setup is complete</p>
+              <h3 id="journey-title">Setting up Balto</h3>
+              <p id="download-detail">Preparing setup</p>
             </div>
             <div class="journey-time">
-              <span id="journey-step">Step 1 of 4</span>
-              <strong id="journey-eta">A few minutes</strong>
+              <strong id="journey-progress">4%</strong>
+              <span id="journey-eta">A few minutes</span>
             </div>
-          </div>
-
-          <div class="balto-track" id="balto-track" style="--progress: 4">
-            <div class="track-fill"></div>
-            <div class="balto-runner" aria-hidden="true">
-              <div class="runner-sprite">
-                <span class="dog-tail"></span>
-                <span class="dog-body"></span>
-                <span class="dog-leg dog-leg-back"></span>
-                <span class="dog-leg dog-leg-front"></span>
-                <span class="dog-head"><img src="/balto-mark.svg" alt="" /></span>
-                <span class="runner-dust runner-dust-one"></span>
-                <span class="runner-dust runner-dust-two"></span>
-              </div>
-            </div>
-            <span class="track-start">START</span>
-            <span class="track-finish">CODE</span>
-          </div>
-
-          <div class="progress-meta">
-            <span id="download-detail">Preparing the route</span>
-            <span id="elapsed-time">Elapsed 0s</span>
           </div>
 
           <ol class="setup-steps">
-            <li id="setup-step-system">
-              <span class="step-marker">1</span>
-              <div><strong>Check your PC</strong><span>GPU, storage, and Windows support</span></div>
-            </li>
-            <li id="setup-step-runtime">
-              <span class="step-marker">2</span>
-              <div><strong>Build the engine</strong><span>Private runtime, coding tools, and Documents\Balto</span></div>
-            </li>
             <li id="setup-step-model">
-              <span class="step-marker">3</span>
-              <div><strong>Download Qwen</strong><span>About 24 GB, saved safely as it downloads</span></div>
+              <span class="step-marker">1</span>
+              <strong>Download Qwen <small>23 GB</small></strong>
+            </li>
+            <li id="setup-step-stack">
+              <span class="step-marker">2</span>
+              <strong>Build local stack <small>18 GB</small></strong>
             </li>
             <li id="setup-step-launch">
-              <span class="step-marker">4</span>
-              <div><strong>Start coding</strong><span>Load the GPU and open a fresh workspace</span></div>
+              <span class="step-marker">3</span>
+              <strong>Start Balto</strong>
             </li>
           </ol>
 
-          <div class="journey-note">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="3.2"/></svg>
-            <span id="journey-note">Keep Balto open. Downloads resume automatically if your connection is interrupted</span>
-          </div>
+          <div class="setup-overall-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="4"><i id="setup-overall-bar"></i></div>
+          <p class="setup-elapsed" id="elapsed-time">Elapsed 0s</p>
         </section>
 
         <div class="check-grid">
