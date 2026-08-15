@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::ffi::OsString;
+use std::fs::{self, OpenOptions};
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -9,6 +10,90 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+pub fn run_hidden_launcher_if_requested() -> Option<i32> {
+    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if args.first().and_then(|value| value.to_str()) != Some("--balto-launch-hidden") {
+        return None;
+    }
+    Some(match launch_hidden_child(&args[1..]) {
+        Ok(()) => 0,
+        Err(error) => {
+            let error_path = std::env::temp_dir().join("balto-launch-error.log");
+            let _ = fs::write(error_path, error);
+            1
+        }
+    })
+}
+
+fn launch_hidden_child(args: &[OsString]) -> Result<(), String> {
+    let mut pid_file = None;
+    let mut stdout_path = None;
+    let mut stderr_path = None;
+    let mut working_directory = None;
+    let mut index = 0;
+
+    while index < args.len() {
+        let flag = args[index]
+            .to_str()
+            .ok_or_else(|| "Invalid Balto launcher option".to_string())?;
+        if flag == "--" {
+            index += 1;
+            break;
+        }
+        let value = args
+            .get(index + 1)
+            .cloned()
+            .ok_or_else(|| format!("Missing value for {flag}"))?;
+        match flag {
+            "--pid-file" => pid_file = Some(PathBuf::from(value)),
+            "--stdout" => stdout_path = Some(PathBuf::from(value)),
+            "--stderr" => stderr_path = Some(PathBuf::from(value)),
+            "--cwd" => working_directory = Some(PathBuf::from(value)),
+            _ => return Err(format!("Unknown Balto launcher option: {flag}")),
+        }
+        index += 2;
+    }
+
+    let program = args
+        .get(index)
+        .ok_or_else(|| "Missing Balto service executable".to_string())?;
+    let pid_file = pid_file.ok_or_else(|| "Missing Balto service PID path".to_string())?;
+    let stdout_path = stdout_path.ok_or_else(|| "Missing Balto service output path".to_string())?;
+    let stderr_path = stderr_path.ok_or_else(|| "Missing Balto service error path".to_string())?;
+    if let Some(parent) = pid_file.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Could not create Balto PID directory: {error}"))?;
+    }
+
+    let stdout = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stdout_path)
+        .map_err(|error| format!("Could not open {}: {error}", stdout_path.display()))?;
+    let stderr = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&stderr_path)
+        .map_err(|error| format!("Could not open {}: {error}", stderr_path.display()))?;
+
+    let mut command = Command::new(program);
+    command
+        .args(&args[index + 1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .creation_flags(CREATE_NO_WINDOW);
+    if let Some(directory) = working_directory {
+        command.current_dir(directory);
+    }
+    let child = command
+        .spawn()
+        .map_err(|error| format!("Could not start Balto background service: {error}"))?;
+    fs::write(&pid_file, child.id().to_string())
+        .map_err(|error| format!("Could not write {}: {error}", pid_file.display()))?;
+    Ok(())
+}
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
